@@ -1,0 +1,89 @@
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  padding: var(--space-4) 0;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.step:last-child {
+  flex: 0 1 auto;
+}
+
+.connector {
+  flex: 1;
+  height: 2px;
+  margin-right: var(--space-2);
+  background: var(--color-border);
+  min-width: 1.5rem;
+}
+
+.completed .connector {
+  background: var(--color-success);
+}
+
+.active .connector {
+  background: var(--color-success);
+}
+
+.marker {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-muted);
+  background: var(--color-bg-card);
+}
+
+.number {
+  line-height: 1;
+}
+
+.completed .marker {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: #fff;
+}
+
+.active .marker {
+  background: var(--color-accent-blue);
+  border-color: var(--color-accent-blue);
+  color: #fff;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.completed .label {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+}
+
+.active .label {
+  color: var(--color-accent-blue);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (max-width: 720px) {
+  .label {
+    display: none;
+  }
+}

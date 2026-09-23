@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="EUAMS.API/EUAMS.API.csproj" />
+  <Project Path="EUAMS.Core/EUAMS.Core.csproj" />
+  <Project Path="EUAMS.Data/EUAMS.Data.csproj" />
+  <Project Path="EUAMS.Shared/EUAMS.Shared.csproj" />
+</Solution>

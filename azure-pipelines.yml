@@ -1,0 +1,55 @@
+# ASP.NET
+# Build and test ASP.NET projects.
+# Add steps that publish symbols, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/apps/aspnet/build-aspnet-4
+
+trigger:
+- develop
+
+pool:
+  name: 'Default'
+
+variables:
+  BuildConfiguration: 'Release'
+  projects: '**/*.csproj'
+  OutputDir: '$(Build.ArtifactStagingDirectory)/publish'
+
+steps:
+- checkout: self
+  clean: all
+- task: UseDotNet@2
+  displayName: 'Use .NET Core sdk 10.x'
+  inputs:
+    version: 10.x
+    includePreviewVersions: false
+    performMultiLevelLookup: true
+
+# Restore all .csproj files
+- task: DotNetCoreCLI@2
+  displayName: 'Restore NuGet packages'
+  inputs:
+    command: 'restore'
+    projects: '**/*.csproj'
+
+# Build all projects
+- task: DotNetCoreCLI@2
+  displayName: 'Build'
+  inputs:
+    command: 'build'
+    projects: '**/*.csproj'
+    arguments: '--configuration $(BuildConfiguration)'
+
+# Publish all outputs as artifacts
+- task: DotNetCoreCLI@2
+  displayName: 'Publish Projects'
+  inputs:
+    command: 'publish'
+    projects: '**/*.csproj'
+    arguments: '--configuration $(BuildConfiguration) --output $(OutputDir)'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+    PathtoPublish: '$(OutputDir)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'

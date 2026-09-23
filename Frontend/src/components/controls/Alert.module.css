@@ -1,0 +1,45 @@
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.icon {
+  display: inline-flex;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.info {
+  background: var(--color-accent-blue-soft);
+  border-color: #bfdbfe;
+  color: #1e3a5f;
+}
+
+.warning {
+  background: var(--color-warning-soft);
+  border-color: #fcd34d;
+  color: var(--color-warning);
+}
+
+.error {
+  background: var(--color-danger-soft);
+  border-color: #fecaca;
+  color: var(--color-danger);
+}
+
+.success {
+  background: var(--color-success-soft);
+  border-color: #a7f3d0;
+  color: var(--color-success);
+}

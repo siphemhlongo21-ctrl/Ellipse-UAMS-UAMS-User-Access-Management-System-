@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="eThekwini Electricity and Energy">
+  <rect width="64" height="64" rx="10" fill="#1a2b5d"/>
+  <path
+    fill="#ffffff"
+    d="M32 10c-8.5 0-15.5 5.2-15.5 14.2 0 4.2 1.8 7.4 4.4 10.1L32 54l11.1-19.7c2.6-2.7 4.4-5.9 4.4-10.1C47.5 15.2 40.5 10 32 10zm0 6.5c5.2 0 9.2 3.2 9.2 7.7S37.2 32 32 32s-9.2-3.3-9.2-7.8S26.8 16.5 32 16.5z"
+  />
+  <path
+    fill="#7eb6e8"
+    d="M32 18c-3.8 0-6.8 2.4-6.8 5.5S28.2 29 32 29s6.8-2.4 6.8-5.5S35.8 18 32 18z"
+  />
+</svg>

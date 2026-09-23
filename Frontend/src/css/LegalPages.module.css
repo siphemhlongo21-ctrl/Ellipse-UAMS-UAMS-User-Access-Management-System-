@@ -1,0 +1,91 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(43, 108, 176, 0.12), transparent 42%),
+    linear-gradient(160deg, #0b1f3a 0%, #132f54 45%, #1a3d6d 100%);
+}
+
+.card {
+  width: min(36rem, 100%);
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.logo {
+  align-self: flex-start;
+}
+
+.title {
+  color: var(--color-navy);
+  font-size: clamp(1.4rem, 2vw, 1.75rem);
+}
+
+.lead {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.55;
+}
+
+.list,
+.listPlain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  line-height: 1.5;
+  padding-left: 1.1rem;
+}
+
+.listPlain {
+  list-style: none;
+  padding-left: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.buttonLink,
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: #e2e8f0;
+  color: var(--color-navy);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  width: fit-content;
+}
+
+.buttonLink:hover,
+.backLink:hover {
+  background: #cbd5e1;
+}
+
+.footerNote {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.footerNote a {
+  color: var(--color-accent-blue);
+  font-weight: var(--font-weight-medium);
+}
+
+.footerNote a:hover {
+  text-decoration: underline;
+}
