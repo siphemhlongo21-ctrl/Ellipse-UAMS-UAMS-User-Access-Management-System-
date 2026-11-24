@@ -116,7 +116,7 @@ It replaces a manual, email-driven access request process with a governed digita
 ## Running Locally
 
 ### Prerequisites
-- .NET 8 SDK
+- .NET 10.0
 - Node.js 20+
 - SQL Server (or Docker)
 - Docker Desktop (optional, for MinIO)
