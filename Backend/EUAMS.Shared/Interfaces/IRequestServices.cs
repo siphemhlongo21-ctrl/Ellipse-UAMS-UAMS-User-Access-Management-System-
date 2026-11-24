@@ -42,8 +42,6 @@ namespace EUAMS.Shared.Interfaces
 
         Task<bool> ResubmitAmendment(int requestId);
 
-        Task<bool> CancelRequest(int requestId);
-
         Task<List<RequestDetails>> GetICTManagerRequestsAsync();
 
         Task<List<RequestDetails>> GetTrainingCenterRequestsAsync();

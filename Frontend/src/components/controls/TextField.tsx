@@ -12,19 +12,23 @@ export function TextField({
     readOnly,
     inputMode,
     maxLength,
-    max
-}: { 
-    label: string; 
-    required?: boolean; 
-    placeholder?: string; 
-    type?: string; 
-    value?: string; 
-    onChange?: (value: string) => void; 
-    error?: string; 
+    max,
+    min,
+    helperText
+}: {
+    label: string;
+    required?: boolean;
+    placeholder?: string;
+    type?: string;
+    value?: string;
+    onChange?: (value: string) => void;
+    error?: string;
     readOnly?: boolean;
     inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
     maxLength?: number;
     max?: string;
+    min?: string;
+    helperText?: string;
 }) {
     const inputCls =
         "w-full px-3 py-2.5 border rounded-lg text-sm text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-2 shadow-sm";
@@ -37,17 +41,21 @@ export function TextField({
             <label className="block text-xs font-semibold text-foreground/70 mb-1.5">
                 {label} {required && <span className="text-red-500">*</span>}
             </label>
-            <input 
+            <input
                 type={type}
                 inputMode={inputMode}
                 maxLength={maxLength}
                 max={max}
+                min={min}
                 placeholder={placeholder}
                 value={onChange ? (value ?? "") : undefined}
                 onChange={onChange ? (e) => onChange?.(e.target.value) : undefined}
                 readOnly={readOnly}
                 className={`${inputCls} ${borderCls} ${readOnly ? "bg-muted/50 text-foreground/70 cursor-not-allowed" : "bg-white"}`}
             />
+            {(error || helperText) && !error && helperText && (
+                <p className="text-[11px] text-foreground/50 mt-1">{helperText}</p>
+            )}
             {error && (
                 <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1">
                     <AlertCircle size={10} /> {error}

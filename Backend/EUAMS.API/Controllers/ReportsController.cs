@@ -2,12 +2,14 @@ using EUAMS.API.Security;
 using EUAMS.Shared.DTOs.Reports;
 using EUAMS.Shared.Interfaces;
 using EUAMS.Shared.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EUAMS.API.Controllers
 {
     [Route("api/[controller]/[action]")]
     [ApiController]
+    [Authorize]
     public class ReportsController : ControllerBase
     {
         private readonly IReportService _reports;

@@ -1,19 +1,16 @@
+using EUAMS.Data.Entities.Base;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EUAMS.Data.Entities
 {
-    public class Contractor
+    public class Contractor : Requestor
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int Id { get; set; }
 
         public string IdentificationNumber { get; set; }
-
-        public string Surname { get; set; }
-
-        public string FirstName { get; set; }
 
         public string EmailAddress { get; set; }
 
@@ -27,13 +24,14 @@ namespace EUAMS.Data.Entities
 
         public DateTime EndDate { get; set; }
 
-        public string Department { get; set; }
-
-        public string Branch { get; set; }
-
         public bool Active { get; set; }
 
         public List<Request> Requests { get; set; } = new();
+
+        public override string GetEmailAddress()
+        {
+            return EmailAddress;
+        }
     }
 }
 

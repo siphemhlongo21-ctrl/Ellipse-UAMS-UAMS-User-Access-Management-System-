@@ -1,14 +1,14 @@
 using EUAMS.Core.Extensions;
+using EUAMS.Core.Notifications;
 using EUAMS.Data;
 using EUAMS.Data.Entities;
 using EUAMS.Shared.Enums;
-using EUAMS.Shared.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace EUAMS.Core.Notifications
+namespace EUAMS.Core.BackgroundServices
 {
     /// <summary>
     /// PDF/US-026 — daily sweep that reminds requesters and Line Managers when access
@@ -60,12 +60,14 @@ namespace EUAMS.Core.Notifications
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<EuamsDbContext>();
-            var notifications = scope.ServiceProvider.GetRequiredService<IRequestNotificationService>();
+            var notifications = scope.ServiceProvider.GetRequiredService<RequestNotificationService>();
 
             var today = DateTime.UtcNow.Date;
             var implemented = RequestStatus.Implemented.GetDescription();
 
             var candidates = await db.Requests.AsNoTracking()
+                .Include(o => o.Employee)
+                .Include(o => o.Contractor)
                 .Where(r =>
                     r.EndDate != null
                     && r.Status == implemented)
@@ -93,13 +95,7 @@ namespace EUAMS.Core.Notifications
                     if (alreadySent)
                         continue;
 
-                    await notifications.NotifyExpiryRemindersAsync(
-                        request.Id,
-                        request.RequestNumber,
-                        request.EmployeeEmail,
-                        request.EndDate.Value,
-                        daysRemaining,
-                        cancellationToken);
+                    await notifications.NotifyExpiryRemindersAsync(request, cancellationToken);
 
                     db.RequestStatusHistories.Add(new RequestStatusHistory
                     {

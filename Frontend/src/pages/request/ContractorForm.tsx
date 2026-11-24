@@ -37,11 +37,12 @@ export function ContractorForm() {
     const from = location.state?.from?.pathname || "/requests";
 
     const [step, setStep] = useState(1);
-    const [requestKind, setRequestKind] = useState<"access" | "termination">("access");
-    const [env, setEnv] = useState<"PROD" | "TEST" | "DEV">("TEST");
+    const [env, setEnv] = useState<"PROD" | "TEST" | "DEV">("PROD");
     const [submitted, setSubmitted] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [docUploadWarnings, setDocUploadWarnings] = useState<string[] | null>(null);
+    const [submittedAt, setSubmittedAt] = useState<Date | null>(null);
     const [submittedRef, setSubmittedRef] = useState("EAM-2026-009");
     const [dept, setDept] = useState("");
     const [terminationDate, setTerminationDate] = useState("");
@@ -54,9 +55,10 @@ export function ContractorForm() {
     const [contactNumber, setContactNumber] = useState("");
     const [contractStartDate, setContractStartDate] = useState("");
     const [contractEndDate, setContractEndDate] = useState("");
+    const [accessStartDate, setAccessStartDate] = useState("");
     const [businessJustification, setBusinessJustification] = useState("");
     const [userAccessType, setUserAccessType] = useState("Temporary/Acting");
-    const [requestType, setRequestType] = useState("New User");
+    const [requestType, setRequestType] = useState("New Employee");
     const [ellipsePosition, setEllipsePosition] = useState("");
     const [positionToCopy, setPositionToCopy] = useState("");
     const [menuAccess, setMenuAccess] = useState("");
@@ -79,8 +81,7 @@ export function ContractorForm() {
         revokeViewerDocument(viewingDoc);
         setViewingDoc(null);
     };
-    // Document verification fields — Verified By auto-filled from logged-in user
-    const [docsVerified, setDocsVerified] = useState("");
+
     const [verifiedBy, setVerifiedBy] = useState(session?.displayName ?? "");
     const verifiedDate = new Date().toISOString().slice(0, 10);
     const [branch, setBranch] = useState("");
@@ -104,12 +105,14 @@ export function ContractorForm() {
     };
     const [contractorPopiaChecked, setContractorPopiaChecked] = useState(false);
     const [showContractorPopiaModal, setShowContractorPopiaModal] = useState(false);
-    const isContractTermination = requestKind === "termination";
+    const isContractTermination = requestType === "termination";
+    const isProctutionRequest = env === "PROD";
     const requiredOk = isContractTermination
-        ? Boolean(terminationDate && terminationReason.trim())
-        : Boolean(docs[0].uploaded && docs[1].uploaded && docsVerified && verifiedBy && verifiedDate && contractorPopiaChecked);
+        ? Boolean(terminationDate && terminationReason)
+        : Boolean(docs[0].uploaded && docs[1].uploaded && verifiedBy && verifiedDate && contractorPopiaChecked);
 
     const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
+    const [idType, setIdType] = useState("");
 
     // IMPORTANT: this early return must come AFTER all hooks (React rules of hooks).
     // Having it before the hooks previously broke state updates in the form.
@@ -150,10 +153,11 @@ export function ContractorForm() {
             errors.companyName = "Please enter Contractor Company Name.";
         }
 
-        // ID / Passport Number — Required + exactly 13 digits
-        if (isBlank(identificationNumber)) {
+        if (isBlank(idType)) {
+            errors.idType = "Please select identification type.";
+        } else if (isBlank(identificationNumber)) {
             errors.identificationNumber = "Please enter ID / Passport Number.";
-        } else if (!isThirteenDigitId(identificationNumber)) {
+        } else if (idType === 'SaId' && !isThirteenDigitId(identificationNumber)) {
             errors.identificationNumber = "ID number must contain exactly 13 digits (numbers only).";
         }
 
@@ -183,8 +187,10 @@ export function ContractorForm() {
         if (isBlank(contractStartDate)) errors.contractStartDate = "Please enter Contract Start Date.";
         if (isBlank(contractEndDate)) {
             errors.contractEndDate = "Please enter Contract End Date.";
-        } else if (contractStartDate && new Date(contractEndDate) < new Date(contractStartDate)) {
-            errors.contractEndDate = "Contract End Date must be on or after Start Date.";
+        } else if (new Date(contractEndDate) <= new Date(contractStartDate)) {
+            errors.contractEndDate = "Contract End Date must be after Start Date.";
+        } else if (new Date(contractEndDate) <= new Date(new Date().toDateString())) {
+            errors.contractEndDate = "Contract End Date must be a future date (from tomorrow onwards).";
         }
 
         // Department — Required
@@ -206,7 +212,11 @@ export function ContractorForm() {
     function validateContractorStep2(): Record<string, string> {
         if (isContractTermination) {
             const errors: Record<string, string> = {};
-            if (isBlank(terminationDate)) errors.terminationDate = "Please enter Termination Date.";
+            if (isBlank(terminationDate)) {
+                errors.terminationDate = "Please enter Termination Date.";
+            } else if (terminationDate < new Date().toISOString().split("T")[0]) {
+                errors.terminationDate = "Termination Date cannot be in the past.";
+            }
             if (isBlank(terminationReason)) errors.terminationReason = "Please enter the reason for termination.";
             return errors;
         }
@@ -215,6 +225,8 @@ export function ContractorForm() {
         if (isBlank(userAccessType)) errors.userAccessType = "Please select Access Level Type.";
         if (isBlank(requestType)) errors.requestType = "Please select Request Type.";
         if (isBlank(menuAccess)) errors.menuAccess = "Please enter Menu Access / Modules.";
+        if (isBlank(accessStartDate)) errors.accessStartDate = "Please enter Access Start Date.";
+        else if (accessStartDate < new Date().toISOString().split("T")[0]) errors.accessStartDate = "Access Start Date cannot be in the past.";
         return errors;
     }
 
@@ -229,6 +241,7 @@ export function ContractorForm() {
             setStep(1);
             return;
         }
+
         if (submitting) return;
         setSubmitting(true);
         setSubmitError(null);
@@ -244,9 +257,9 @@ export function ContractorForm() {
                 contactNumber,
                 department: dept,
                 branch: branch,
-                responsibleManager: session?.displayName ?? verifiedBy,
+                responsibleManager: session?.serviceNumber ?? verifiedBy,
                 businessJustification,
-                contractStartDate,
+                contractStartDate: accessStartDate || contractStartDate,
                 contractEndDate,
                 terminationDate,
                 terminationReason,
@@ -254,12 +267,15 @@ export function ContractorForm() {
                 menuAccess,
                 userAccessType,
                 positionToCopy,
-                requestType,
+                requestType: requestType,
                 identityFile: docFiles[0],
                 contractorCardFile: docFiles[1],
                 contractFile: docFiles[2],
             });
             setSubmittedRef(created.id);
+            const warnings = (created as { documentUploadWarnings?: string[] }).documentUploadWarnings;
+            setDocUploadWarnings(warnings && warnings.length > 0 ? warnings : null);
+            setSubmittedAt(new Date());
             setSubmitted(true);
         } catch (err) {
             setSubmitError(err instanceof Error ? err.message : "Failed to submit contractor request");
@@ -292,7 +308,6 @@ export function ContractorForm() {
                     {[
                         ["Request ID", submittedRef],
                         ["Request Type", isContractTermination ? "Terminate Contractor Access" : "Contractor Access"],
-                        ["Next Step", isContractTermination ? "HC Systems Implementation" : "Responsible Manager Approval"],
                     ].map(([l, v]) => (
                         <div key={l} className="flex justify-between text-xs">
                             <span className="text-foreground/50 font-semibold">{l}</span>
@@ -303,7 +318,34 @@ export function ContractorForm() {
                         <span className="text-foreground/50 font-semibold">Environment</span>
                         <EnvBadge env={env} />
                     </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-foreground/50 font-semibold">Next Workflow Stage</span>
+                        <span className="font-mono font-bold text-primary">
+                            {isContractTermination ? "HC Systems Implementation" : isProctutionRequest ? "Training Verification" : "ICT Manager Approval"}
+                        </span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-foreground/50 font-semibold">Submission Date &amp; Time</span>
+                        <span className="font-mono font-bold text-primary">
+                            {submittedAt
+                                ? submittedAt.toLocaleDateString("en-ZA", { day: "2-digit", month: "2-digit", year: "numeric" }) +
+                                " " +
+                                submittedAt.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
+                                : "—"}
+                        </span>
+                    </div>
                 </div>
+                {docUploadWarnings && docUploadWarnings.length > 0 && (
+                    <div className="w-full max-w-sm bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left space-y-1">
+                        <p className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                            <AlertCircle size={12} className="shrink-0" /> Some documents could not be uploaded
+                        </p>
+                        <ul className="list-disc list-inside text-[11px] text-amber-700 space-y-0.5">
+                            {docUploadWarnings.map((w) => <li key={w}>{w}</li>)}
+                        </ul>
+                        <p className="text-[10px] text-amber-600">Please re-upload these documents against request {submittedRef} from the Requests page.</p>
+                    </div>
+                )}
                 <button onClick={() => navigate("/requests", { replace: true })} className="px-6 py-2.5 text-white rounded-lg text-sm font-bold hover:opacity-90 transition-opacity shadow-sm" style={{ background: "#1a2d6e" }}>
                     Return to Requests
                 </button>
@@ -367,29 +409,6 @@ export function ContractorForm() {
                     <div className="flex-1 overflow-auto px-6 py-6">
                         {step === 1 && (
                             <div className="w-full bg-white border border-border rounded-xl shadow-sm p-6 space-y-5">
-                                <div>
-                                    <label className="block text-xs font-bold text-foreground/60 uppercase tracking-wider mb-2">
-                                        Request Type <span className="text-red-500">*</span>
-                                    </label>
-                                    <div className="relative">
-                                        <select
-                                            value={requestKind}
-                                            onChange={(e) => {
-                                                setRequestKind(e.target.value as "access" | "termination");
-                                                setStep(1);
-                                            }}
-                                            className="w-full appearance-none pl-3 pr-8 py-2.5 bg-white border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer shadow-sm"
-                                        >
-                                            <option value="access">Request Contractor Access</option>
-                                            <option value="termination">Terminate Contractor Access / Contract</option>
-                                        </select>
-                                        <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40 pointer-events-none" />
-                                    </div>
-                                    <p className="mt-1.5 text-[11px] text-foreground/50">
-                                        The Line Manager submits contractor access and termination requests on the contractor&apos;s behalf.
-                                    </p>
-                                </div>
-
                                 <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: "Barlow, sans-serif" }}>
                                     {isContractTermination ? "Contractor Details" : "Contractor Personal Information"}
                                 </h3>
@@ -397,21 +416,53 @@ export function ContractorForm() {
                                     <TextField label="First Name" required placeholder="e.g. Marcus" value={firstName} onChange={(v) => { setFirstName(v); if (step1Errors.firstName) setStep1Errors(e => ({ ...e, firstName: "" })); }} error={step1Errors.firstName} />
                                     <TextField label="Surname" required placeholder="e.g. Van Der Berg" value={surname} onChange={(v) => { setSurname(v); if (step1Errors.surname) setStep1Errors(e => ({ ...e, surname: "" })); }} error={step1Errors.surname} />
                                     <TextField label="Contractor Company Name" required placeholder="e.g. Siemens SA" value={companyName} onChange={(v) => { setCompanyName(v); if (step1Errors.companyName) setStep1Errors(e => ({ ...e, companyName: "" })); }} error={step1Errors.companyName} />
-                                    <TextField
-                                        label="ID / Passport Number"
-                                        required
-                                        placeholder="e.g. 8901125678091"
-                                        inputMode="numeric"
-                                        maxLength={13}
-                                        value={identificationNumber}
-                                        onChange={(v) => {
-                                            setIdentificationNumber(digitsOnly(v).slice(0, 13));
-                                            if (step1Errors.identificationNumber) setStep1Errors(e => ({ ...e, identificationNumber: "" }));
-                                        }}
-                                        error={step1Errors.identificationNumber}
-                                    />
                                     <TextField label="Email Address" required placeholder="contractor@company.co.za" type="email" value={email} onChange={(v) => { setEmail(v); if (step1Errors.email) setStep1Errors(e => ({ ...e, email: "" })); }} error={step1Errors.email} />
 
+                                    <div>
+                                        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Identification Type <span className="text-red-400">*</span></label>
+                                        <div className="relative">
+                                            <select value={idType} onChange={e => setIdType(e.target.value)}
+                                                className="w-full appearance-none pl-3 pr-8 py-2.5 bg-input-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer">
+                                                <option value="">Select Identification Type...</option>
+                                                <option key="SaId">SA Identification</option>
+                                                <option key="Passport">Passport</option>
+                                            </select>
+                                            <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                        </div>
+                                        {step1Errors.dept && <p className="text-[11px] text-red-600 mt-1">{step1Errors.dept}</p>}
+                                    </div>
+                                    {idType !== 'Passport' &&
+                                        <TextField
+                                            readOnly={!idType}
+                                            label="ID Number"
+                                            required
+                                            type="numeric"
+                                            placeholder="e.g. 8901125678091"
+                                            maxLength={13}
+                                            value={identificationNumber}
+                                            onChange={(v) => {
+                                                setIdentificationNumber(digitsOnly(v).slice(0, 13));
+                                                if (step1Errors.identificationNumber) setStep1Errors(e => ({ ...e, identificationNumber: "" }));
+                                            }}
+                                            error={step1Errors.identificationNumber}
+                                        />
+                                    }
+
+                                    {idType === 'Passport' &&
+                                        <TextField
+                                            readOnly={!idType}
+                                            label="Passport Number"
+                                            required
+                                            placeholder="e.g. M12345678"
+                                            maxLength={10}
+                                            value={identificationNumber}
+                                            onChange={(v) => {
+                                                setIdentificationNumber(v);
+                                                if (step1Errors.identificationNumber) setStep1Errors(e => ({ ...e, identificationNumber: "" }));
+                                            }}
+                                            error={step1Errors.identificationNumber}
+                                        />
+                                    }
                                     <TextField
                                         label="Contact Number"
                                         required placeholder="e.g. 031 311 2345"
@@ -425,10 +476,29 @@ export function ContractorForm() {
                                         }}
                                         error={step1Errors.contactNumber}
                                     />
+
+                                    <div>
+                                        <label className="block text-xs font-semibold text-foreground/70 mb-1.5">Responsible Manager <span className="text-red-500">*</span></label>
+                                        <input
+                                            type="text"
+                                            defaultValue={session?.displayName ?? ""}
+                                            readOnly={!!session?.displayName}
+                                            placeholder="Full name of responsible eThekwini manager"
+                                            className={`w-full px-3 py-2.5 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent shadow-sm ${session?.displayName ? "bg-muted/50 text-foreground/70 cursor-not-allowed" : "bg-white placeholder:text-foreground/30"}`}
+                                        />
+                                        {session?.displayName && <p className="text-[11px] text-foreground/40 mt-1">Auto-filled from your account. You are the responsible manager for this contractor request.</p>}
+                                    </div>
+                                    
                                     {!isContractTermination ? (
                                         <>
-                                            <TextField label="Contract Start Date" required type="date" value={contractStartDate} onChange={setContractStartDate} />
-                                            <TextField label="Contract End Date" required type="date" value={contractEndDate} onChange={setContractEndDate} />
+                                            {/* Start date may be a previous date for contractor access; end date must be a future date */}
+                                            <TextField label="Contract Start Date" required type="date" value={contractStartDate} onChange={(value) => { setContractStartDate(value); setStep1Errors((errors) => ({ ...errors, contractStartDate: "" })); }} error={step1Errors.contractStartDate} />
+                                            <TextField label="Contract End Date" required type="date" min={(() => {
+                                                const base = new Date(); base.setDate(base.getDate() + 1); // End Date must be a future date (from tomorrow onwards)
+                                                const start = contractStartDate ? new Date(contractStartDate + "T00:00:00") : null;
+                                                if (start) { start.setDate(start.getDate() + 1); if (start > base) base.setTime(start.getTime()); }
+                                                return base.toISOString().split("T")[0];
+                                            })()} value={contractEndDate} onChange={(value) => { setContractEndDate(value); setStep1Errors((errors) => ({ ...errors, contractEndDate: "" })); }} error={step1Errors.contractEndDate} />
                                         </>
                                     ) : null}
                                 </div>
@@ -469,17 +539,7 @@ export function ContractorForm() {
                                         {step1Errors.branch && <p className="text-[11px] text-red-600 mt-1">{step1Errors.branch}</p>}
                                     </div>
                                 </div> : null}
-                                <div>
-                                    <label className="block text-xs font-semibold text-foreground/70 mb-1.5">Responsible Manager <span className="text-red-500">*</span></label>
-                                    <input
-                                        type="text"
-                                        defaultValue={session?.displayName ?? ""}
-                                        readOnly={!!session?.displayName}
-                                        placeholder="Full name of responsible eThekwini manager"
-                                        className={`w-full px-3 py-2.5 border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent shadow-sm ${session?.displayName ? "bg-muted/50 text-foreground/70 cursor-not-allowed" : "bg-white placeholder:text-foreground/30"}`}
-                                    />
-                                    {session?.displayName && <p className="text-[11px] text-foreground/40 mt-1">Auto-filled from your account. You are the responsible manager for this contractor request.</p>}
-                                </div>
+
                                 {!isContractTermination ? <div>
                                     <label className="block text-xs font-semibold text-foreground/70 mb-1.5">
                                         Business Justification <span className="text-red-500">*</span>
@@ -535,6 +595,7 @@ export function ContractorForm() {
                                             label="Termination Date"
                                             required
                                             type="date"
+                                            min={new Date().toISOString().split("T")[0]}
                                             value={terminationDate}
                                             onChange={setTerminationDate}
                                         />
@@ -570,15 +631,20 @@ export function ContractorForm() {
                                             <SelectField
                                                 label="Request Type"
                                                 required
-                                                options={["New User", "Amendment"]}
+                                                options={["New Employee", "Create Signon", "Primary Position Amendment", "Secondary Position Amendment", "Signon-Menu", "Unlocking of Sign On's", "Temporary Position Amendment", "Acting Position Amendment", "Update Existing Employee Record Details", "Other"]}
                                                 value={requestType}
                                                 onChange={setRequestType}
                                                 error={step2Errors.requestType}
                                             />
                                             <TextField label="Ellipse Position" placeholder="e.g. ENG-READ-01" value={ellipsePosition} onChange={setEllipsePosition} />
                                             <TextField label="Position to Copy" placeholder="Optional" value={positionToCopy} onChange={setPositionToCopy} />
-                                            <TextField label="Access Start Date" required type="date" value={contractStartDate} onChange={setContractStartDate} />
-                                            <TextField label="Access End Date" required type="date" value={contractEndDate} onChange={setContractEndDate} />
+                                            <TextField label="Access Start Date" required type="date" min={new Date().toISOString().split("T")[0]} value={accessStartDate} onChange={(value) => { setAccessStartDate(value); if (step2Errors.accessStartDate) setStep2Errors((errors) => ({ ...errors, accessStartDate: "" })); }} error={step2Errors.accessStartDate} />
+                                            <TextField label="Access End Date" required type="date" max={contractEndDate || undefined} min={(() => {
+                                                const base = new Date(); base.setDate(base.getDate() + 1); // End Date must be a future date (from tomorrow onwards)
+                                                const start = contractStartDate ? new Date(contractStartDate + "T00:00:00") : null;
+                                                if (start) { start.setDate(start.getDate() + 1); if (start > base) base.setTime(start.getTime()); }
+                                                return base.toISOString().split("T")[0];
+                                            })()} value={contractEndDate} onChange={setContractEndDate} />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-semibold text-foreground/70 mb-1.5">Menu Access / Modules <span className="text-red-500">*</span></label>
@@ -664,19 +730,6 @@ export function ContractorForm() {
                                         <p className="text-[11px] text-violet-600 mt-0.5">The Line Manager must verify all contractor documents before submission. All fields are mandatory.</p>
                                     </div>
                                     <div className="p-4 space-y-3">
-                                        <div>
-                                            <label className="block text-xs font-bold text-foreground/70 mb-1.5">Documents Verified <span className="text-red-500">*</span></label>
-                                            <div className="relative">
-                                                <select value={docsVerified} onChange={e => setDocsVerified(e.target.value)}
-                                                    className="w-full appearance-none pl-3 pr-8 py-2.5 bg-white border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-violet-400 cursor-pointer shadow-sm">
-                                                    <option value="">Select verification status...</option>
-                                                    <option value="All documents verified and accepted">All documents verified and accepted</option>
-                                                    <option value="Documents verified — minor discrepancy noted">Documents verified — minor discrepancy noted</option>
-                                                    <option value="Partial — awaiting re-submission">Partial — awaiting re-submission</option>
-                                                </select>
-                                                <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40 pointer-events-none" />
-                                            </div>
-                                        </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs font-bold text-foreground/70 mb-1.5">Verified By <span className="text-red-500">*</span></label>
@@ -701,7 +754,7 @@ export function ContractorForm() {
 
                                 {!docs[0].uploaded || !docs[1].uploaded
                                     ? <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 font-semibold"><AlertCircle size={13} className="shrink-0" /> Identity Document and Contractor ID Card must be uploaded before proceeding.</div>
-                                    : !docsVerified || !verifiedBy || !verifiedDate
+                                    : !verifiedBy || !verifiedDate
                                         ? <div className="flex items-center gap-2 p-3 bg-violet-50 border border-violet-200 rounded-lg text-xs text-violet-700 font-semibold"><AlertCircle size={13} className="shrink-0" /> Complete all Document Verification fields to proceed.</div>
                                         : <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-semibold"><CheckCircle2 size={13} className="shrink-0" /> Documents uploaded and verified. You may proceed to review.</div>
                                 }
@@ -739,7 +792,7 @@ export function ContractorForm() {
                                 <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: "Barlow, sans-serif" }}>Review & Submit</h3>
                                 <div className="bg-muted/40 border border-border rounded-xl divide-y divide-border">
                                     <div className="px-4 py-2.5 bg-muted/50"><span className="text-[11px] font-bold text-foreground/50 uppercase tracking-wider">Access Details</span></div>
-                                    {[["Environment", <EnvBadge env={env} />], ["Access Level", "Read Only"], ["Request Type", "New User"]].map(([l, v]) => (
+                                    {[["Environment", <EnvBadge env={env} />], ["Access Level", userAccessType], ["Request Type", requestType]].map(([l, v]) => (
                                         <div key={String(l)} className="px-4 py-2.5 flex justify-between items-center text-xs">
                                             <span className="text-foreground/50 font-semibold">{l}</span>
                                             <span className="text-foreground font-bold">{v}</span>

@@ -72,7 +72,8 @@ export function getNextWorkflowStep(
     action: "line-manager-approve" | "training-verify" | "ict-approve",
 ): { forwardMessage: string; statusLabel: string; statusCls: string } {
     const isTerminate = TERMINATE_REQ_TYPES.includes(req.userAccessType ?? "");
-    const isProdPath = req.environment === "PROD" || req.environment === "ALL";
+    const isProdPath = req.environment === "Production" || req.environment === "ALL";
+
 
     if (action === "line-manager-approve") {
         if (isTerminate) {

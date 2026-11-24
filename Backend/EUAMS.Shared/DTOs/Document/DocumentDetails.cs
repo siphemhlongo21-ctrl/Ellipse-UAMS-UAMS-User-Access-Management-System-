@@ -26,12 +26,10 @@
         public int RequestId { get; set; }
 
         public bool Active { get; set; }
+
         public bool Archived { get; set; }
 
-        //Two new properties added below to support retention policy
         public DateTime? ArchivedDate { get; set; }
-
-        public DateTime? RetentionExpiryDate { get; set; }
     }
 
     public class DocumentDownloadResult

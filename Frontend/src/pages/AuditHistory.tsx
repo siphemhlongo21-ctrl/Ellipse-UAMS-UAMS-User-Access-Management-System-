@@ -64,7 +64,11 @@ export function AuditHistory({ requests = [] }: { requests?: RequestDetails[] })
     const filtered = allReqs.filter(r => {
         const q = search.toLowerCase();
         return !q || r.employeeName?.toLowerCase().includes(q) || r.id.toString().toLowerCase().includes(q)
-            || r.serviceNumber?.toLowerCase().includes(q) || r.department?.toLowerCase().includes(q);
+            || r.serviceNumber?.toLowerCase().includes(q) || r.department?.toLowerCase().includes(q)
+            || (r.permanentPostId?.toLowerCase().includes(q) ?? false)
+            || (r.temporaryPostId?.toLowerCase().includes(q) ?? false)
+            || (r.companyName?.toLowerCase().includes(q) ?? false)
+            || (r.contractor?.companyName?.toLowerCase().includes(q) ?? false);
     });
 
     useEffect(() => {

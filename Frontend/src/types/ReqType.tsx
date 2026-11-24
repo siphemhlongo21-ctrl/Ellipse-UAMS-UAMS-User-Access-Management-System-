@@ -5,6 +5,7 @@ export type ReqType =
   | "Primary Position Amendment"
   | "Secondary Position Amendment"
   | "Signon-Menu"
+  | "Unlocking of Sign On's"
   | "Temporary Position Amendment"
   | "Acting Position Amendment"
   | "Temporary/Acting Position Amendment"

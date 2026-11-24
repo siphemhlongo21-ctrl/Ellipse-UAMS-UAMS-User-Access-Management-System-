@@ -21,7 +21,7 @@ export const rolesApi = {
     http.post<UserRoleDetails>("/Roles/AssignRole", { body: data }),
 
   revokeRole: (appUserId: number, roleCode: string) =>
-    http.delete<void>("/Roles/RevokeRole", { params: { appUserId, roleCode } }),
+    http.patch<void>("/Roles/RevokeRole", { params: { appUserId, roleCode } }),
 
   setUserActive: (appUserId: number, isActive: boolean) =>
     http.put<void>("/Roles/SetUserActive", { params: { appUserId, isActive } }),

@@ -20,6 +20,7 @@ const ELLIPSE_REQUEST_TYPES: ReqType[] = [
   "Primary Position Amendment",
   "Secondary Position Amendment",
   "Signon-Menu",
+  "Unlocking of Sign On's",
   "Temporary Position Amendment",
   "Acting Position Amendment",
   "Terminate & Delete Signon",
@@ -116,7 +117,11 @@ function validateEmployeeStep2(params: {
   }
 
   if (params.isTerminate) {
-    if (isBlank(params.terminationDate)) errors.terminationDate = "Please enter Termination Date.";
+    if (isBlank(params.terminationDate)) {
+      errors.terminationDate = "Please enter Termination Date.";
+    } else if (params.terminationDate < new Date().toISOString().split("T")[0]) {
+      errors.terminationDate = "Termination Date cannot be in the past.";
+    }
     if (isBlank(params.terminationReason)) errors.terminationReason = "Please enter Reason for Termination.";
     return errors;
   }
@@ -126,12 +131,16 @@ function validateEmployeeStep2(params: {
   }
   if (isBlank(params.startDate)) {
     errors.startDate = "Please enter Start Date.";
+  } else if (params.startDate < new Date().toISOString().split("T")[0]) {
+    errors.startDate = "Start Date cannot be in the past.";
   }
   if (params.needsEndDate && !params.isPermanent && isBlank(params.endDate)) {
     errors.endDate = "Please enter End Date.";
   }
   if (params.startDate && params.endDate && params.endDate < params.startDate) {
     errors.endDate = "End Date must be on or after Start Date.";
+  } else if (params.endDate && params.endDate <= new Date().toISOString().split("T")[0]) {
+    errors.endDate = "End Date must be a future date (from tomorrow onwards).";
   }
   if (isBlank(params.menuAccess)) errors.menuAccess = "Please enter Menu Access / Modules Required.";
 
@@ -225,6 +234,7 @@ export function NewRequestForm() {
   const [actingPostId, setActingPostId] = useState("");
   const [postId, setPostId] = useState(canInitiateTermination ? "" : autoPostId);
   const [branch, setBranch] = useState(canInitiateTermination ? "" : session?.branchDesc ?? "");
+  const [branchAutofilled, setBranchAutofilled] = useState(!canInitiateTermination && !!session?.branchDesc);
   const [designation, setDesignation] = useState(canInitiateTermination ? "" : autoDesignation);
   const [contactNumber, setContactNumber] = useState("");
   const [teamMembers, setTeamMembers] = useState<UstEmployeeDetails[]>([]);
@@ -269,6 +279,7 @@ export function NewRequestForm() {
     setPermanentPostId(employee.postNo);
     setDept(employee.deptDesc);
     setBranch(employee.branchDesc);
+    setBranchAutofilled(!!employee.branchDesc);
     setDesignation(employee.designation);
     setEmployeeSearch(`${employee.firstName} ${employee.surname}`);
     if (step1Errors.firstName || step1Errors.surname || step1Errors.serviceNumber) {
@@ -346,8 +357,30 @@ export function NewRequestForm() {
   };
 
   const submitToApi = async () => {
+    if (isTerminate) {
+      const errors = validateEmployeeStep2({
+        isTerminate,
+        skipUserAccessType,
+        needsEndDate,
+        isPermanent,
+        selectedEnvs: isTerminate ? selectedEnvs : [env],
+        userAccessType,
+        ellipsePosition,
+        startDate,
+        endDate,
+        terminationDate,
+        menuAccess,
+        businessJustification,
+        terminationReason,
+      });
+      setStep2Errors(errors);
+      if (Object.keys(errors).length > 0) return;
+    }
+
     if (submitting) return;
+
     if (!isTerminate && (!popiaChecked || !idUploaded)) return;
+
     setSubmitting(true);
     setLoadingMessage("Submitting")
     setSubmitError(null);
@@ -423,7 +456,11 @@ export function NewRequestForm() {
               : env],
             ["Date Submitted", submittedAt.toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" })],
             ["Time Submitted", submittedAt.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })],
-            ["Current Status", submitterRole === "ICT_MANAGER" ? "Submitted — Awaiting ICT Manager's Line Manager Approval" : "Submitted — Awaiting Line Manager Approval"],
+            ["Current Status", isTerminate
+              ? "Submitted — Sent directly to HC Systems Officer for implementation"
+              : submitterRole === "ICT_MANAGER"
+                ? "Submitted — Awaiting ICT Manager's Line Manager Approval"
+                : "Submitted — Awaiting Line Manager Approval"],
           ].map(([l, v]) => (
             <div key={l} className="flex justify-between items-start text-xs border-b border-border/50 pb-2 last:border-0 last:pb-0">
               <span className="text-foreground/50 font-semibold shrink-0 mr-4">{l}</span>
@@ -438,8 +475,8 @@ export function NewRequestForm() {
             <AlertCircle size={12} /> What happens next?
           </p>
           <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-            {submitterRole === "LINE_MANAGER" && isTerminate
-              ? <li>The HC Systems Officer will implement the termination.</li>
+            {isTerminate
+              ? <li>No Line Manager, Training Centre or ICT Manager approval is required — the HC Systems Officer will implement the termination directly.</li>
               : <>
                 {submitterRole === "ICT_MANAGER"
                   ? <li>Your Line Manager will receive a notification to review and approve this request.</li>
@@ -705,13 +742,13 @@ export function NewRequestForm() {
                         <label className="block text-xs font-semibold text-foreground/70 mb-1.5">Branch <span className="text-red-500">*</span></label>
                         <input
                           value={branch}
-                          readOnly={canInitiateTermination || (!isTerminate && !!branch)}
+                          readOnly={branchAutofilled}
                           onChange={(e) => {
                             setBranch(e.target.value);
                             if (step1Errors.branch) setStep1Errors((prev) => ({ ...prev, branch: "" }));
                           }}
                           placeholder="e.g. Elec"
-                          className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent shadow-sm ${canInitiateTermination || autoName
+                          className={`w-full px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent shadow-sm ${branchAutofilled
                             ? "bg-muted/50 text-foreground/70 cursor-not-allowed border-border"
                             : step1Errors.branch
                               ? "bg-white text-foreground placeholder:text-foreground/30 border-red-400"
@@ -890,10 +927,12 @@ export function NewRequestForm() {
                     <p className="mt-1.5 text-[11px] text-foreground/50 flex items-start gap-1.5">
                       <AlertCircle size={10} className="shrink-0 mt-0.5 text-amber-500" />
                       {isTerminate && selectedEnvs.length === 3
-                        ? "All Environments: Line Manager → Training Centre Rep → ICT Manager → HC Systems Officer"
-                        : primaryEnv === "PROD" || primaryEnv === "ALL"
-                          ? "PROD: Line Manager → Training Centre Rep → HC Systems Officer"
-                          : `${primaryEnv}: Line Manager → ICT Manager → HC Systems Officer`}
+                        ? "All Environments: Termination is sent directly to the HC Systems Officer for implementation"
+                        : isTerminate
+                          ? "Termination: sent directly to the HC Systems Officer for implementation (no Line Manager, Training or ICT approval)"
+                          : primaryEnv === "PROD"
+                            ? "PROD: Line Manager → Training Centre Rep → HC Systems Officer"
+                            : `${primaryEnv}: Line Manager → ICT Manager → HC Systems Officer`}
                     </p>
                   </div>
 
@@ -935,6 +974,7 @@ export function NewRequestForm() {
                           label="Termination Date"
                           required
                           type="date"
+                          min={new Date().toISOString().split("T")[0]}
                           value={terminationDate}
                           onChange={(v) => {
                             setTerminationDate(v);
@@ -971,6 +1011,7 @@ export function NewRequestForm() {
                           label="Start Date"
                           required
                           type="date"
+                          min={new Date().toISOString().split("T")[0]}
                           value={startDate}
                           onChange={(v) => {
                             setStartDate(v);
@@ -992,6 +1033,11 @@ export function NewRequestForm() {
                           <input
                             type="date"
                             disabled={isPermanent}
+                            min={(() => {
+                              const base = startDate ? new Date(startDate + "T00:00:00") : new Date();
+                              base.setDate(base.getDate() + 1); // End Date must be a future date (tomorrow or later)
+                              return base.toISOString().split("T")[0];
+                            })()}
                             value={endDate}
                             onChange={(e) => {
                               setEndDate(e.target.value);

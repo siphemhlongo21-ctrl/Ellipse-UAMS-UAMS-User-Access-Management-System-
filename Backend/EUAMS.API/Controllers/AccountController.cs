@@ -8,7 +8,6 @@ namespace EUAMS.API.Controllers
 
     [Route("api/[controller]/[action]")]
     [ApiController]
-    [AllowAnonymous]
     public class AccountController : ControllerBase
     {
         private readonly IAuthServices _authServices;
@@ -21,6 +20,7 @@ namespace EUAMS.API.Controllers
         }
 
         [HttpPost]
+        [AllowAnonymous]
         public async Task<ActionResult<AuthResponse>> Login(string username, string password, CancellationToken cancellationToken)
         {
             try
@@ -40,6 +40,7 @@ namespace EUAMS.API.Controllers
 
 
         [HttpPost]
+        [Authorize]
         public async Task<ActionResult<AuthResponse>> ValidateToken(CancellationToken cancellationToken)
         {
             try

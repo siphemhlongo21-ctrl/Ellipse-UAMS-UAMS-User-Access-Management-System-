@@ -1,12 +1,14 @@
-using EUAMS.Core.Extensions;
+﻿using EUAMS.Core.Extensions;
+using EUAMS.Core.Notifications;
 using EUAMS.Core.Security;
 using EUAMS.Core.Workflow;
 using EUAMS.Data;
 using EUAMS.Data.Entities;
+using EUAMS.Shared.DTOs.Contractor;
+using EUAMS.Shared.DTOs.Employee;
 using EUAMS.Shared.DTOs.Request;
 using EUAMS.Shared.Enums;
 using EUAMS.Shared.Interfaces;
-using EUAMS.Shared.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -22,7 +24,6 @@ namespace EUAMS.Core.Services
             "Acting"
         };
 
-        /// <summary>Request types that require an end date regardless of UserAccessType.</summary>
         private static readonly HashSet<string> TemporaryRequestTypes = new(StringComparer.OrdinalIgnoreCase)
         {
             "Temporary Position Amendment",
@@ -36,7 +37,7 @@ namespace EUAMS.Core.Services
         private readonly EuamsDbContext _context;
         private readonly ICurrentUserService _currentUser;
         private readonly RequestWorkflowWriter _workflow;
-        private readonly IRequestNotificationService _notifications;
+        private readonly RequestNotificationService _notifications;
         private readonly IRequestAccessService _access;
         private readonly ILogger<RequestServices> _logger;
         private readonly ILookupUSTEmployeeServices _uSTEmployeeServices;
@@ -45,7 +46,7 @@ namespace EUAMS.Core.Services
             EuamsDbContext context,
             ICurrentUserService currentUser,
             RequestWorkflowWriter workflow,
-            IRequestNotificationService notifications,
+            RequestNotificationService notifications,
             IRequestAccessService access,
             ILogger<RequestServices> logger,
             ILookupUSTEmployeeServices uSTEmployeeServices)
@@ -66,6 +67,7 @@ namespace EUAMS.Core.Services
                     _context.Requests
                         .Include(r => r.Employee)
                         .Include(r => r.Contractor)
+                        .Include(r => r.DocumentResubmissionRequests)
                         .AsNoTracking())
                 .OrderByDescending(r => r.RequestedDate)
                 .ToListAsync();
@@ -81,6 +83,7 @@ namespace EUAMS.Core.Services
             var request = await _context.Requests
                 .Include(r => r.Employee)
                 .Include(r => r.Contractor)
+                .Include(r => r.DocumentResubmissionRequests)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(r => r.Id == requestId);
 
@@ -192,7 +195,8 @@ namespace EUAMS.Core.Services
             var requestsCreatedByLineManager = _context.Requests
                 .Include(o => o.Contractor)
                 .Include(o => o.Employee)
-                .AsNoTracking()
+				.Include(r => r.DocumentResubmissionRequests)
+				.AsNoTracking()
                 .Where(o => (o.Contractor != null && o.Contractor.ResponsibleManager == serviceNumber) || o.SubmittedByServiceNumber == serviceNumber);
             var allRequests = requests;
 
@@ -209,124 +213,140 @@ namespace EUAMS.Core.Services
             return requests.OrderByDescending(o => o.RequestedDate).ToList();
         }
 
+        private async Task<Request?> ValidateRequest(NewRequestDetails details, string requestType)
+        {
+            var request = await _context.Requests
+                    .Include(o => o.Employee)
+                    .Include(o => o.Contractor)
+                    .FirstOrDefaultAsync(o => o.RequestType.ToLower() == requestType.ToLower() && o.Status != RequestStatus.Implemented.GetDescription() &&
+                    ((o.Employee != null && details.Employee != null && o.Employee.EmailAddress.ToLower() == details.Employee.EmailAddress.ToLower()) ||
+                    (o.Contractor != null && details.Contractor != null && o.Contractor.EmailAddress.ToLower() == details.Contractor.EmailAddress.ToLower()))
+                    && (!string.IsNullOrEmpty(o.UserAccessType) && !string.IsNullOrEmpty(details.UserAccessType) && o.UserAccessType.ToLower() == details.UserAccessType.ToLower())
+                    && (!string.IsNullOrEmpty(details.Environment) && !string.IsNullOrEmpty(o.Environment) && o.Environment.ToLower() == details.Environment.ToLower()));
+
+            if (request != null)
+            {
+                throw new Exception($"Duplicate request, please check {request.RequestNumber}...");
+            }
+
+            return request;
+        }
+
+        private async Task AddRequestEmployyeDetails(EmployeeDetails employeeDetails, Request request)
+        {
+            var employee = await _context.Employees
+                            .FirstOrDefaultAsync(o => o.EmailAddress == employeeDetails!.EmailAddress);
+
+            if (employee == null)
+            {
+                employee = employeeDetails!.ToEntity();
+                await _context.Employees.AddAsync(employee);
+            }
+            else
+            {
+                employee.ActiveDirectoryUsername = employeeDetails!.ActiveDirectoryUsername;
+                employee.FirstName = employeeDetails.FirstName;
+                employee.Surname = employeeDetails.Surname;
+                employee.ContactNumber = employeeDetails.ContactNumber;
+                employee.Department = employeeDetails.Department;
+                employee.Branch = employeeDetails.Branch;
+                employee.Designation = employeeDetails.Designation;
+                employee.PostId = employeeDetails.PostId;
+            }
+
+            await _context.SaveChangesAsync();
+
+            request.EmployeeEmail = employee.EmailAddress;
+            request.Employee = employee;
+
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task AddRequestContractorDetails(ContractorDetails contractorDetails, Request request)
+        {
+            var contractorEmail = contractorDetails.EmailAddress;
+            var contractor = await _context.Contractors
+                .AsNoTracking()
+                .FirstOrDefaultAsync(o => o.EmailAddress == contractorEmail);
+
+            if (contractor is null)
+            {
+                contractor = contractorDetails.ToEntity();
+                await _context.Contractors.AddAsync(contractor);
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                contractor.StartDate = contractorDetails.StartDate;
+                contractor.EndDate = contractorDetails.EndDate;
+                contractor.Branch = contractorDetails.Branch;
+                contractor.Department = contractorDetails.Department;
+                contractor.CompanyName = contractorDetails.CompanyName;
+                contractor.FirstName = contractorDetails.FirstName;
+                contractor.Surname = contractorDetails.Surname;
+            }
+
+            contractor.ResponsibleManager = _currentUser.ServiceNumber;
+
+            request.ContractId = contractor.Id;
+            request.Contractor = contractor;
+
+            await _context.SaveChangesAsync();
+        }
+
+        private RequestStatusHistory CreateRequestStatusHistory(Request request)
+        {
+            return new RequestStatusHistory
+            {
+                RequestId = request.Id,
+                ToStatus = request.Status,
+                Event = "Request Created",
+                Reason = "A new request has been created",
+                ChangedByServiceNumber = _currentUser.ServiceNumber,
+                ChangedAt = DateTime.UtcNow
+            };
+        }
+
         public async Task<RequestDetails> CreateRequest(NewRequestDetails details)
         {
-
             var strategy = _context.Database.CreateExecutionStrategy();
+
             return await strategy.ExecuteAsync(async () =>
             {
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 try
                 {
+                    await _currentUser.EnsureLoadedAsync();
+
                     var requestType = await ResolveRequestTypeName(details.RequestType.Trim());
+                    var request = await ValidateRequest(details, requestType);
 
-                    var request = await _context.Requests
-                    .Include(o => o.Employee)
-                    .Include(o => o.Contractor)
-                    .FirstOrDefaultAsync(o => o.RequestType.ToLower() == requestType.ToLower() && o.Status != RequestStatus.Implemented.GetDescription() &&
-                    ((o.Employee != null && details.Employee != null && o.Employee.EmailAddress.ToLower() == details.Employee.EmailAddress.ToLower()) ||
-                    (o.Contractor != null && details.Contractor != null && o.Contractor.EmailAddress.ToLower() == details.Contractor.EmailAddress.ToLower())
-                    && (!string.IsNullOrEmpty(o.UserAccessType) && !string.IsNullOrEmpty(details.UserAccessType) && o.UserAccessType.ToLower() == details.UserAccessType.ToLower()))
-                    && (!string.IsNullOrEmpty(details.Environment) && !string.IsNullOrEmpty(o.Environment) && o.Environment.ToLower() == details.Environment.ToLower()));
-
-                    if (request != null)
-                    {
-                        throw new Exception($"Duplicate request, please check {request.RequestNumber}...");
-                    }
-
-                    request = new Request
-                    {
-                        Status = RequestStatus.PendingApproval.GetDescription(),
-                        StartDate = details.StartDate,
-                        EndDate = details.EndDate,
-                        RequestedDate = DateTime.UtcNow,
-                        RequestType = requestType,
-                        Environment = details.Environment,
-                        UserAccessType = details.UserAccessType,
-                        EllipsePosition = details.EllipsePosition.Trim(),
-                        PositionToCopy = details.PositionToCopy,
-                        MenuAccess = details.MenuAccess.Trim(),
-                        BusinessJustification = details.BusinessJustification.Trim(),
-                        AdditionalUserAccess = details.AdditionalUserAccess.Trim(),
-                        ContractId = details.ContractId,
-                        TemporaryPosition = details.TemporaryPosition,
-                        TemporaryPostId = details.TemporaryPostId,
-                        PermanentPostId = details.Employee?.PostId,
-                        EllipseUserId = details.EllipseUserId,
-                        SubmittedByServiceNumber = _currentUser.ServiceNumber,
-                        UserType = details.UserType
-                    };
+                    request = details.ConvertToNewRequest(requestType, _currentUser);
 
                     _context.Requests.Add(request);
                     await _context.SaveChangesAsync();
 
-                    await _currentUser.EnsureLoadedAsync();
-                    await _access.EnsureLoadedAsync();
-
                     if (details.UserType == UserType.Employee.GetDescription() && details.Employee != null)
                     {
-                        var employee = await _context.Employees
-                            .FirstOrDefaultAsync(o => o.EmailAddress == details.Employee.EmailAddress);
-
-                        if (employee == null)
-                        {
-                            employee = details.Employee.ToEntity();
-                            await _context.Employees.AddAsync(employee);
-                        }
-                        else
-                        {
-                            employee.ActiveDirectoryUsername = details.Employee.ActiveDirectoryUsername;
-                            employee.FirstName = details.Employee.FirstName;
-                            employee.Surname = details.Employee.Surname;
-                            employee.ContactNumber = details.Employee.ContactNumber;
-                            employee.Department = details.Employee.Department;
-                            employee.Branch = details.Employee.Branch;
-                            employee.Designation = details.Employee.Designation;
-                            employee.PostId = details.Employee.PostId;
-                        }
-
-                        await _context.SaveChangesAsync();
-
-                        request.EmployeeEmail = employee.EmailAddress;
-                        await _context.SaveChangesAsync();
+                        await AddRequestEmployyeDetails(details.Employee, request);
                     }
 
                     if (details.UserType == UserType.Contractor.GetDescription() && details.Contractor != null)
                     {
-                        var contractorEmail = details.Contractor.EmailAddress;
-                        var contractor = await _context.Contractors
-                            .AsNoTracking()
-                            .FirstOrDefaultAsync(o => o.EmailAddress == contractorEmail);
-
-                        if (contractor is null)
-                        {
-                            contractor = details.Contractor.ToEntity();
-                            await _context.Contractors.AddAsync(contractor);
-                            await _context.SaveChangesAsync();
-                        }
-
-                        request.ContractId = contractor.Id;
+                        await AddRequestContractorDetails(details.Contractor, request);
                     }
 
                     request.RequestNumber = $"REQ-{request.RequestedDate:yyyyMMdd}-{request.Id:D6}";
 
-                    await _context.RequestStatusHistories.AddAsync(new RequestStatusHistory
-                    {
-                        RequestId = request.Id,
-                        ToStatus = RequestStatus.PendingApproval.GetDescription(),
-                        Event = "Request Created",
-                        Reason = "A new request has been created",
-                        ChangedByServiceNumber = _currentUser.ServiceNumber,
-                        ChangedAt = DateTime.UtcNow
-                    });
-
+                    await _context.RequestStatusHistories.AddAsync(CreateRequestStatusHistory(request));
                     await _context.SaveChangesAsync();
+                    await NotifySafeAsync(() => _notifications.NotifySubmittedAsync(request, request.Status == RequestStatus.PendingApproval.GetDescription()));
 
-                    await NotifySafeAsync(() => _notifications.NotifySubmittedAsync(
-                            request.Id,
-                            request.RequestNumber,
-                            request.EmployeeEmail));
+                    if (request.Status != RequestStatus.PendingApproval.GetDescription())
+                    {
+                        await NotifySafeAsync(() => _notifications.NotifyStepAdvancedAsync(request, StatusHistoryEvent.LineManagerCreatedRequest));
+                    }
 
                     await transaction.CommitAsync();
 
@@ -353,7 +373,6 @@ namespace EUAMS.Core.Services
                 return new List<RequestDetails>();
             }
 
-            // Normalize for EF translation (case-insensitive match against stored EmployeeEmail).
             var emailSetLower = emailList
                 .Select(e => e.ToLowerInvariant())
                 .ToList();
@@ -363,7 +382,8 @@ namespace EUAMS.Core.Services
             var requests = await _context.Requests
                         .Include(r => r.Employee)
                         .Include(r => r.Contractor)
-                        .AsNoTracking()
+						.Include(r => r.DocumentResubmissionRequests)
+						.AsNoTracking()
                         .Where(r => (r.EmployeeEmail != null
                                     && emailSetLower.Contains(r.EmployeeEmail.ToLower()))
                                     || emails.Contains(r.SubmittedByServiceNumber))
@@ -384,7 +404,7 @@ namespace EUAMS.Core.Services
             var isTemporaryAccess = !string.IsNullOrWhiteSpace(requestDetails.UserAccessType)
                               && TemporaryAccessTypes.Contains(requestDetails.UserAccessType);
             var isTemporaryRequestType = TemporaryRequestTypes.Contains(requestDetails.RequestType ?? string.Empty);
-            var isContractor = requestDetails.UserType.Equals("Contractor", StringComparison.OrdinalIgnoreCase);
+            var isContractor = requestDetails.UserType.Equals(UserType.Contractor.GetDescription(), StringComparison.OrdinalIgnoreCase);
             var endDate = requestDetails.EndDate;
             if (!isTemporaryAccess && !isTemporaryRequestType && !isContractor)
             {
@@ -430,8 +450,7 @@ namespace EUAMS.Core.Services
             await _context.SaveChangesAsync();
 
             await NotifySafeAsync(() =>
-            _notifications.NotifyStepAdvancedAsync(request.Id, request.RequestNumber, request.EmployeeEmail, from.ToString(),
-                to.ToString(), StatusHistoryEvent.LineManagerApproved));
+            _notifications.NotifyStepAdvancedAsync(request, StatusHistoryEvent.LineManagerApproved));
 
             return true;
         }
@@ -464,12 +483,7 @@ namespace EUAMS.Core.Services
                     request.LineManagerApprovalServiceNumber = action.ActionerServiceNumber;
                     await _context.SaveChangesAsync();
 
-                    await NotifySafeAsync(() => _notifications.NotifyRejectedAsync(
-                        request.Id,
-                        request.RequestNumber,
-                        request.EmployeeEmail,
-                        DefaultRole.LineManager,
-                        rejectionReason));
+                    await NotifySafeAsync(() => _notifications.NotifyRejectedAsync(DefaultRole.LineManager, request));
 
                     await transaction.CommitAsync();
 
@@ -496,14 +510,12 @@ namespace EUAMS.Core.Services
                 request,
                 RequestStatus.TrainingVerificationPending);
 
-            // Training verification is only required for Production requests.
             if (request.Environment != Environments.Production.GetDescription())
             {
                 throw new InvalidOperationException(
                     "Training verification is only required for Production requests.");
             }
 
-            // Training Manager must provide a training date.
             if (trainingDate == default)
             {
                 throw new ArgumentException(
@@ -511,13 +523,11 @@ namespace EUAMS.Core.Services
                     nameof(trainingDate));
             }
 
-            // Training date must be strictly before today.
-            // Today and future dates are NOT allowed.
-            if (trainingDate.Date >= DateTime.Today)
+            if (trainingDate.Date > DateTime.Today)
             {
                 throw new ArgumentException(
-                    "Training date must be before today. " +
-                    "Today and future dates are not allowed.",
+                    "Training date must be today going back. " +
+                    "Future dates are not allowed.",
                     nameof(trainingDate));
             }
 
@@ -549,8 +559,7 @@ namespace EUAMS.Core.Services
             await _context.SaveChangesAsync();
 
             await NotifySafeAsync(() =>
-                _notifications.NotifyStepAdvancedAsync(request.Id, request.RequestNumber, request.EmployeeEmail,
-                    from.ToString(), RequestStatus.HcActionPending.ToString(), StatusHistoryEvent.TrainingVerified));
+                _notifications.NotifyStepAdvancedAsync(request, StatusHistoryEvent.TrainingVerified));
 
             return true;
         }
@@ -575,12 +584,7 @@ namespace EUAMS.Core.Services
             request.TrainingApprovalServiceNumber = action.ActionerServiceNumber;
             await _context.SaveChangesAsync();
 
-            await NotifySafeAsync(() => _notifications.NotifyRejectedAsync(
-                request.Id,
-                request.RequestNumber,
-                request.EmployeeEmail,
-                DefaultRole.TrainingCentre,
-                rejectionReason));
+            await NotifySafeAsync(() => _notifications.NotifyRejectedAsync(DefaultRole.TrainingCentre, request));
 
             return true;
         }
@@ -590,11 +594,6 @@ namespace EUAMS.Core.Services
             await _access.EnsureLoadedAsync();
             var request = await LoadTrackedRequestAsync(requestId);
             EnsureStatus(request, RequestStatus.ICTManagerApprovalPending);
-
-            if (request.LineManagerApproved != true)
-            {
-                throw new InvalidOperationException("Line Manager needs approval is required before ICT approval.");
-            }
 
             var from = request.Status;
             request.ICTManagerApproved = true;
@@ -608,8 +607,7 @@ namespace EUAMS.Core.Services
             request.ICTManagerApprovalServiceNumber = action.ActionerServiceNumber;
             await _context.SaveChangesAsync();
 
-            await NotifySafeAsync(() => _notifications.NotifyStepAdvancedAsync(request.Id, request.RequestNumber, request.EmployeeEmail,
-                from.ToString(), RequestStatus.HcActionPending.GetDescription(), StatusHistoryEvent.ICTManagerApproved));
+            await NotifySafeAsync(() => _notifications.NotifyStepAdvancedAsync(request, StatusHistoryEvent.ICTManagerApproved));
 
             return true;
         }
@@ -634,12 +632,7 @@ namespace EUAMS.Core.Services
             request.ICTManagerApprovalServiceNumber = action.ActionerServiceNumber;
             await _context.SaveChangesAsync();
 
-            await NotifySafeAsync(() => _notifications.NotifyRejectedAsync(
-                request.Id,
-                request.RequestNumber,
-                request.EmployeeEmail,
-                DefaultRole.IctManager,
-                rejectionReason));
+            await NotifySafeAsync(() => _notifications.NotifyRejectedAsync(DefaultRole.IctManager, request));
 
             return true;
         }
@@ -649,7 +642,7 @@ namespace EUAMS.Core.Services
             await _access.EnsureLoadedAsync();
             var request = await LoadTrackedRequestAsync(requestId);
             EnsureStatus(request, RequestStatus.HcActionPending);
-            await EnsureReadyForHcAsync(request);
+            object value = await EnsureReadyForHcAsync(request);
 
             if (string.IsNullOrEmpty(details.EllipseUserId))
             {
@@ -696,10 +689,7 @@ namespace EUAMS.Core.Services
             request.HcSystemOfficerApprovalServiceNumber = action.ActionerServiceNumber;
             await _context.SaveChangesAsync();
 
-            await NotifySafeAsync(() => _notifications.NotifyImplementedAsync(
-                request.Id,
-                request.RequestNumber,
-                request.EmployeeEmail));
+            await NotifySafeAsync(() => _notifications.NotifyImplementedAsync(request));
 
             return true;
         }
@@ -724,12 +714,7 @@ namespace EUAMS.Core.Services
             request.HcSystemOfficerApprovalServiceNumber = action.ActionerServiceNumber;
             await _context.SaveChangesAsync();
 
-            await NotifySafeAsync(() => _notifications.NotifyRejectedAsync(
-                request.Id,
-                request.RequestNumber,
-                request.EmployeeEmail,
-                DefaultRole.HcSystemsOfficer,
-                rejectionReason));
+            await NotifySafeAsync(() => _notifications.NotifyRejectedAsync(DefaultRole.HcSystemsOfficer, request));
 
             return true;
         }
@@ -798,14 +783,10 @@ namespace EUAMS.Core.Services
             }
             catch
             {
-                // demo / UST unavailable — still send Template 10 to the requestor
+               
             }
 
-            await NotifySafeAsync(() => _notifications.NotifyReturnForAmendmentAsync(
-                request.Id,
-                request.RequestNumber,
-                request.Employee?.EmailAddress ?? request.Contractor?.EmailAddress,
-                reason));
+            await NotifySafeAsync(() => _notifications.NotifyReturnForAmendmentAsync(request, reason));
 
             await _workflow.AddStatusHistoryAsync(request.Id, RequestStatus.ReturnForAmendment.GetDescription(),
                 RequestStatus.ReturnForAmendment, StatusHistoryEvent.ReturnForAmendment,
@@ -827,7 +808,6 @@ namespace EUAMS.Core.Services
             var from = request.Status;
             request.MissingDocuments = false;
             request.Status = RequestStatus.HcActionPending.GetDescription();
-            // Clear prior HC checklist so HC re-verifies after amendment.
             request.MandatoryInformationVerified = false;
             request.ContractorDocumentsVerified = false;
             request.HCSystemsAdminApproved = null;
@@ -847,39 +827,7 @@ namespace EUAMS.Core.Services
             await _context.SaveChangesAsync();
 
             await NotifySafeAsync(() =>
-            _notifications.NotifyStepAdvancedAsync(request.Id, request.RequestNumber, request.EmployeeEmail,
-                from.ToString(), RequestStatus.HcActionPending.ToString(), StatusHistoryEvent.ResubmittedAmendment));
-
-            return true;
-        }
-
-        public async Task<bool> CancelRequest(int requestId)
-        {
-            await _access.EnsureLoadedAsync();
-            var request = await LoadTrackedRequestAsync(requestId);
-
-            if (request.Status == RequestStatus.PendingApproval.GetDescription() || request.Status == RequestStatus.ReturnForAmendment.GetDescription())
-            {
-                throw new InvalidOperationException("Request cannot be cancelled in its current status.");
-            }
-
-            await _currentUser.EnsureLoadedAsync();
-            var isPrivileged = _currentUser.HasPermission(PermissionCodes.RequestImplement)
-                               || _currentUser.HasPermission(PermissionCodes.RequestSearchAll);
-            var from = request.Status;
-            request.Status = RequestStatus.Cancelled.GetDescription();
-            request.CancelledAt = DateTime.UtcNow;
-            request.CancelledByServiceNumber = _currentUser.ServiceNumber;
-            request.RequestClosed = true;
-            request.ClosureOutcome = ClosureOutcome.Cancelled.GetDescription();
-
-            await _workflow.AddStatusHistoryAsync(request.Id, from, RequestStatus.Cancelled, StatusHistoryEvent.Cancelled);
-            await _context.SaveChangesAsync();
-
-            await NotifySafeAsync(() => _notifications.NotifyCancelledAsync(
-                request.Id,
-                request.RequestNumber,
-                request.EmployeeEmail));
+            _notifications.NotifyStepAdvancedAsync(request, StatusHistoryEvent.ResubmittedAmendment));
 
             return true;
         }
@@ -936,7 +884,10 @@ namespace EUAMS.Core.Services
         private async Task<Request> LoadTrackedRequestAsync(int requestId)
         {
             var request = await _context.Requests
-                .FirstOrDefaultAsync(r => r.Id == requestId);
+                .Include(o => o.Employee)
+                .Include(o => o.Contractor)
+				.Include(r => r.DocumentResubmissionRequests)
+				.FirstOrDefaultAsync(r => r.Id == requestId);
 
             if (request is null)
             {
@@ -952,24 +903,6 @@ namespace EUAMS.Core.Services
             {
                 throw new InvalidOperationException(
                     $"Request must be in status {expected.GetDescription()}, but was {request.Status}.");
-            }
-        }
-
-        private async Task EnsureReadyForHcAsync(Request request)
-        {
-            if (request.LineManagerApproved != true)
-            {
-                throw new InvalidOperationException("Line Manager approval is required before HC action.");
-            }
-
-            if (request.Environment == Environments.Production.GetDescription() && request.TrainingVerified != true)
-            {
-                throw new InvalidOperationException("Training verification is required before HC action on Production.");
-            }
-
-            if (request.ICTManagerApproved != true && (request.Environment == Environments.Test.GetDescription() || request.Environment == Environments.Development.GetDescription()))
-            {
-                throw new InvalidOperationException("ICT Manager approval is required for test and development requests before HC action.");
             }
         }
 
@@ -994,10 +927,14 @@ namespace EUAMS.Core.Services
             return match.Name;
         }
 
-        /// <summary>PDF �2.6 � contractor mandatory documents before workflow entry.</summary>
         private async Task EnsureContractorDocumentGateAsync(Request request)
         {
             if (!string.Equals(request.UserType, "Contractor", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+           
+            if ((request.RequestType ?? string.Empty).Contains("terminate", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -1023,7 +960,6 @@ namespace EUAMS.Core.Services
             }
         }
 
-        // ICT Manager
         public async Task<List<RequestDetails>> GetICTManagerRequestsAsync()
         {
             var requests = await _context.Requests.AsNoTracking()
@@ -1035,7 +971,6 @@ namespace EUAMS.Core.Services
             return requests.ToListDetails().OrderByDescending(o => o.RequestedDate).ToList();
         }
 
-        // Training Center
         public async Task<List<RequestDetails>> GetTrainingCenterRequestsAsync()
         {
             var requests = await _context.Requests.AsNoTracking()
@@ -1047,7 +982,6 @@ namespace EUAMS.Core.Services
             return requests.ToListDetails();
         }
 
-        // HC Systems Officer
         public async Task<List<RequestDetails>> GetHcSystemsOfficerRequestsAsync()
         {
             var requests = await _context.Requests.AsNoTracking()
@@ -1057,6 +991,22 @@ namespace EUAMS.Core.Services
                 .ToListAsync();
 
             return requests.ToListDetails().OrderByDescending(o => o.RequestedDate).ToList();
+        }
+
+        public async Task<object?> EnsureReadyForHcAsync(Request request)
+        {
+            await EnsureContractorDocumentGateAsync(request);
+
+            var isTerminationRequest = (request.RequestType ?? string.Empty).Contains("terminate", StringComparison.OrdinalIgnoreCase);
+            if (!isTerminationRequest && string.Equals(request.Environment, Environments.Production.GetDescription(), StringComparison.OrdinalIgnoreCase))
+            {
+                if (!request.TrainingVerified.GetValueOrDefault(false))
+                {
+                    throw new InvalidOperationException("Training must be verified for Production requests before HC implementation.");
+                }
+            }
+
+            return null;
         }
     }
 }

@@ -2,12 +2,14 @@
 using EUAMS.Shared.DTOs.RolePermission;
 using EUAMS.Shared.Interfaces;
 using EUAMS.Shared.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EUAMS.API.Controllers
 {
     [Route("api/[controller]/[action]")]
     [ApiController]
+    [Authorize]
     public class RolePermissionController : ControllerBase
     {
         private readonly IRolePermissionService _rolePermissionService;

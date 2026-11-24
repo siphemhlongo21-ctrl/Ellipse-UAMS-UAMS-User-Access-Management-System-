@@ -78,7 +78,7 @@ namespace EUAMS.Core.Security
             _surname = principal?.FindFirst(ClaimTypes.Surname)?.Value ?? throw new Exception("Invalid Employee Surname");
             _roles.AddRange(await _permissionService.GetRolesForUserAsync(_serviceNumber, cancellationToken));
 
-            if (!_roles.Any() && !_roles.Contains("EMPLOYEE"))
+            if (!_roles.Any() || !_roles.Contains("EMPLOYEE"))
             {
                 _roles.Add("EMPLOYEE");
             }

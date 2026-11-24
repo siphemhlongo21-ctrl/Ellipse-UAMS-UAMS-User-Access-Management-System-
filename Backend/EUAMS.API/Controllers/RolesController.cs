@@ -2,12 +2,14 @@ using EUAMS.API.Security;
 using EUAMS.Shared.DTOs.Security;
 using EUAMS.Shared.Interfaces;
 using EUAMS.Shared.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EUAMS.API.Controllers
 {
     [Route("api/[controller]/[action]")]
     [ApiController]
+    [Authorize]
     public class RolesController : ControllerBase
     {
         private readonly IRoleAdminService _roleAdminService;
@@ -261,7 +263,7 @@ namespace EUAMS.API.Controllers
             }
         }
 
-        [HttpDelete]
+        [HttpPatch]
         [AuthorizePermission(PermissionCodes.AdminRolesAssign)]
         public async Task<ActionResult> RevokeRole([FromQuery] string serviceNumber, [FromQuery] string roleCode)
         {

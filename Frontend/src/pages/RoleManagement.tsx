@@ -279,6 +279,7 @@ export function RoleManagementView() {
       });
       setSuccessMessage(`Assigned "${assignTarget.name}" to ${employeeLabel(employee)}.`);
       await refreshUsersAndRoles();
+      setAssignTarget(null);
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : "Could not assign this role.");
     } finally {
@@ -528,7 +529,7 @@ export function RoleManagementView() {
 
             <div className="px-6 pb-5 space-y-4">
               <label className="block text-sm text-muted-foreground">
-                Search by name, email, or service number
+                Search by ad username, email, or service number
               </label>
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
@@ -537,7 +538,7 @@ export function RoleManagementView() {
                     value={searchInput}
                     autoComplete="off"
                     spellCheck={false}
-                    placeholder="e.g. Fatima, fatima.moosa@ethekwini.gov.za, or EM001003"
+                    placeholder="e.g. Jane, jane.doe@example.com, or EM001003"
                     onChange={e => {
                       setSearchInput(e.target.value);
                       setSearchError(null);

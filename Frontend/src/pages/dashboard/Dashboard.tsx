@@ -14,7 +14,7 @@ import { EXPIRY_CATEGORY_META, EXPIRY_COLOR_CLASSES, type ExpiryCategoryId } fro
 import { expiryDaysLeft, getExpiryCategoryItems } from "../../utilities/dashboard";
 import { canCreateAccessRequest } from "../../utilities/request";
 import type { Env } from "../../types";
-import { formatDateTime } from "../../api/mappers";
+import { formatDate, formatDateTime } from "../../api/mappers";
 
 
 export function Dashboard() {
@@ -337,7 +337,7 @@ export function Dashboard() {
                 if (expiring.length === 0 && expired.length === 0) return null;
                 return (
                     <div className="space-y-2">
-                        {expired.map(r => (
+                        {expired.slice(0, 4).map(r => (
                             <div key={r.id} className="flex items-start gap-3 p-3.5 bg-red-50 border border-red-200 rounded-xl">
                                 <XCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
                                 <div className="flex-1">
@@ -347,7 +347,7 @@ export function Dashboard() {
                                 <span className="shrink-0 text-xs text-red-600 italic">Contact your Line Manager to renew</span>
                             </div>
                         ))}
-                        {expiring.map(r => {
+                        {expiring.slice(0, 4).map(r => {
                             const days = Math.ceil((new Date(r.endDate!).getTime() - today.getTime()) / 86400000);
                             return (
                                 <div key={r.id} className="flex items-start gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl">
@@ -357,7 +357,7 @@ export function Dashboard() {
                                             Access Expiring {days === 0 ? "Today" : `in ${days} day${days === 1 ? "" : "s"}`} — {r.id}
                                         </p>
                                         <p className="text-xs text-amber-700 mt-0.5">
-                                            Your {r.environment} Ellipse access expires on <span className="font-bold">{r.endDate}</span>. Submit a renewal request to avoid interruption.
+                                            Your {r.environment} Ellipse access expires on <span className="font-bold">{formatDate(r.endDate)}</span>. Submit a renewal request to avoid interruption.
                                         </p>
                                     </div>
                                     <span className="shrink-0 text-xs text-amber-700 italic">Contact your Line Manager to renew</span>
@@ -406,7 +406,7 @@ export function Dashboard() {
                         </span>
                     </div>
                     <div className="divide-y divide-border">
-                        {requests.map(req => (
+                        {requests.slice(0, 4).map(req => (
                             <div key={req.id} className="p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-0.5">
@@ -442,7 +442,7 @@ export function Dashboard() {
                         </span>
                     </div>
                     <div className="divide-y divide-border">
-                        {requests.map(req => (
+                        {requests.slice(0, 4).map(req => (
                             <div key={req.id} className="p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-0.5">
@@ -481,7 +481,7 @@ export function Dashboard() {
                             <AlertCircle size={12} className="text-orange-500" /> Temporary Access Expiry Monitoring
                         </h3>
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                            {widgetDefs.map(({ id, label, items, color }) => {
+                            {widgetDefs.slice(0, 4).map(({ id, label, items, color }) => {
                                 const cls = EXPIRY_COLOR_CLASSES[color];
                                 return (
                                     <div key={id} className={`rounded-xl border shadow-sm overflow-hidden ${items.length > 0 ? cls.card : "border-border bg-white"}`}>
@@ -559,7 +559,7 @@ export function Dashboard() {
                         {requests.length === 0 ? (
                             <div className="p-6 text-center text-sm text-foreground/40">No requests awaiting implementation.</div>
                         ) : null}
-                        {requests.map(req => (
+                        {requests.slice(0, 4).map(req => (
                             <div key={req.id}
                                 onClick={() => navigate("/requests/" + req.id, { replace: true })}
                                 className="p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer group">
@@ -596,7 +596,7 @@ export function Dashboard() {
                         <span className="text-xs font-mono font-bold text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">{pending} items</span>
                     </div>
                     <div className="divide-y divide-border">
-                        {filtered.filter(r => r.status === "Awaiting Line Manager Approval").map(req => (
+                        {filtered.filter(r => r.status === "Awaiting Line Manager Approval").slice(0, 4).map(req => (
                             <div key={req.id} className="p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-0.5">
@@ -652,7 +652,7 @@ export function Dashboard() {
                                     </p>
                                 </div>
                                 <div className="divide-y divide-border">
-                                    {needsResponse.map(req => (
+                                    {needsResponse.slice(0, 4).map(req => (
                                         <div key={req.id} className="p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-0.5 flex-wrap">

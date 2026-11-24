@@ -4,7 +4,7 @@ namespace EUAMS.Core.Extensions
 {
     public static class USTEmployeeDetailsExtensions
     {
-        public static USTEmployeeDetails ToDto(this Data.Views.UstEmployeeDetails employeeDetails)
+        public static USTEmployeeDetails ToDetails(this Data.Views.UstEmployeeDetails employeeDetails)
         {
             return new USTEmployeeDetails
             {

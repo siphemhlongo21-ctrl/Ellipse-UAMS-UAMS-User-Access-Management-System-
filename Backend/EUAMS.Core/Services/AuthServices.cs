@@ -49,7 +49,6 @@ namespace EUAMS.Core.Services
 
             string token = string.Empty;
             USTEmployeeDetails? employee = null;
-            var roles = new List<string>();
             var permissions = new List<string>();
 
             var http = new HttpClient
@@ -88,7 +87,7 @@ namespace EUAMS.Core.Services
             }
 
             token = _tokenService.GenerateToken(employee);
-            roles.AddRange(await _permissionService.GetRolesForUserAsync(employee.ServiceNo));
+            var roles = await _permissionService.GetRolesForUserAsync(employee.ServiceNo);
             permissions.AddRange(await _permissionService.GetPermissionsForUserAsync(employee.ServiceNo));
 
             if (string.IsNullOrEmpty(token) || employee == null)

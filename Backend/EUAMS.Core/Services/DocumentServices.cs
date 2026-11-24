@@ -3,7 +3,6 @@ using EUAMS.Core.Security;
 using EUAMS.Data;
 using EUAMS.Data.Entities;
 using EUAMS.Shared.DTOs.Document;
-using EUAMS.Shared.DTOs.DocumentAudit;
 using EUAMS.Shared.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +12,6 @@ namespace EUAMS.Core.Services
     {
         private readonly EuamsDbContext _context;
         private readonly IRequestAccessService _access;
-        //private readonly IObjectStorage _storage;
         private readonly ICurrentUserService _currentUser;
 
         public DocumentServices(
@@ -101,19 +99,7 @@ namespace EUAMS.Core.Services
             var request = await LoadRequestAsync(requestId);
 
             var documents = await _context.Documents.AsNoTracking()
-                .Where(d => d.RequestId == requestId && d.IsActive && !d.Archived)
-                .ToListAsync();
-
-            return documents.ToListDetails();
-        }
-        
-        public async Task<List<DocumentDetails>> GetArchivedRequestDocuments(int requestId)
-        {
-            await _access.EnsureLoadedAsync();
-            var request = await LoadRequestAsync(requestId);
-
-            var documents = await _context.Documents.AsNoTracking()
-                .Where(d => d.RequestId == requestId && d.IsActive && d.Archived)
+                .Where(d => d.RequestId == requestId && d.IsActive)
                 .ToListAsync();
 
             return documents.ToListDetails();
@@ -188,78 +174,49 @@ namespace EUAMS.Core.Services
         public async Task<bool> ArchiveDocument(int documentId)
         {
             await _access.EnsureLoadedAsync();
-            var entity = await _context.Documents.FindAsync(documentId);
-            if (entity is null)
+            var document = await _context.Documents.FindAsync(documentId);
+            if (document is null)
             {
                 return false;
             }
 
-            var request = await LoadRequestAsync(entity.RequestId);
+            var request = await LoadRequestAsync(document.RequestId);
             _access.EnsureNotClosed(request);
 
-            if (entity.Archived)
-            {
-                return true;
-            }
-
-            entity.Archived = true;
-            entity.ArchivedDate = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
-
-            await LogDocumentAuditAsync(documentId, "Archived");
+            await ArchiveDocument(document);
             return true;
         }
 
-        public async Task<bool> RestoreDocument(int documentId)
+        public async Task<int> ArchiveAllExpiredDocumentsAsync(CancellationToken cancellationToken = default)
         {
-            await _access.EnsureLoadedAsync();
-            var entity = await _context.Documents.FindAsync(documentId);
-            if (entity is null)
+            var now = DateTime.UtcNow;
+
+            var documents = await _context.Documents
+                .Where(d =>
+                    d.IsActive &&
+                    !d.Archived &&
+                    d.DateUploaded.AddYears(3).Date <= now.Date)
+                .ToListAsync(cancellationToken);
+
+            if (documents.Count == 0)
             {
-                return false;
+                return 0;
             }
-
-            var request = await LoadRequestAsync(entity.RequestId);
-            _access.EnsureNotClosed(request);
-
-            if (!entity.Archived)
+            
+            foreach (var document in documents)
             {
-                return true;
-            }
+              await  ArchiveDocument(document , cancellationToken);
 
-            entity.Archived = false;
-            entity.ArchivedDate = null;
-            await _context.SaveChangesAsync();
+            }  
 
-            await LogDocumentAuditAsync(documentId, "Restored");
-            return true;
+            return documents.Count;
         }
-
-        public async Task<List<DocumentAuditDetails>> GetDocumentAuditTrail(int documentId)
+        private async Task ArchiveDocument(Document document, CancellationToken cancellationToken = default)
         {
-            await _access.EnsureLoadedAsync();
-            var entity = await _context.Documents.AsNoTracking().FirstOrDefaultAsync(d => d.Id == documentId)
-                ?? throw new KeyNotFoundException($"Document with ID {documentId} not found");
-
-            await LoadRequestAsync(entity.RequestId);
-
-            var audits = await _context.DocumentAudits.AsNoTracking()
-                .Where(a => a.DocumentId == documentId)
-                .OrderByDescending(a => a.DateCreated)
-                .ToListAsync();
-
-            return audits.ToListDetails();
-        }
-
-        private async Task LogDocumentAuditAsync(int documentId, string auditType)
-        {
-            _context.DocumentAudits.Add(new DocumentAudit
-            {
-                DocumentId = documentId,
-                DateCreated = DateTime.UtcNow,
-                AuditType = auditType
-            });
-            await _context.SaveChangesAsync();
+            
+            document.Archived = true;
+            document.ArchivedDate = DateTime.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
         }
 
         public async Task<DocumentDownloadResult> DownloadDocument(int documentId)

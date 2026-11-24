@@ -1,4 +1,4 @@
-using EUAMS.Core.Extensions;
+﻿using EUAMS.Core.Extensions;
 using EUAMS.Data;
 using EUAMS.Data.Entities;
 using EUAMS.Shared.Enums;
@@ -21,6 +21,8 @@ namespace EUAMS.Core.Security
             RequestStatus.Draft.GetDescription(),
             RequestStatus.ReturnForAmendment.GetDescription(),
             RequestStatus.PendingApproval.GetDescription(),
+            RequestStatus.TrainingVerificationPending.GetDescription(),
+            RequestStatus.ICTManagerApprovalPending.GetDescription(),
         ];
 
         private static readonly HashSet<string> TrainingQueue =
@@ -103,7 +105,6 @@ namespace EUAMS.Core.Security
             var serviceNumber = _currentUser.ServiceNumber;
             var hasOwn = _currentUser.HasPermission(PermissionCodes.RequestViewOwn);
             var hasTeam = _currentUser.HasPermission(PermissionCodes.RequestViewTeam);
-            // Queue visibility follows approval permissions (LINE_MANAGER has approve but not view.linked).
             var linkedLm = _currentUser.HasPermission(PermissionCodes.RequestApproveLineManager);
             var linkedTraining = _currentUser.HasPermission(PermissionCodes.RequestVerifyTraining);
             var linkedIct = _currentUser.HasPermission(PermissionCodes.RequestApproveIct);
@@ -112,11 +113,6 @@ namespace EUAMS.Core.Security
                 PermissionCodes.RequestReturnForAmendment);
             var now = DateTime.UtcNow;
 
-            // Approval queues are stage-open: any LM/Training/ICT/HC with the action
-            // permission sees all requests at that status (including base EMPLOYEE submits).
-            // EmployeeManagers only scopes RequestViewTeam browsing, not approve/reject.
-            // Actors who already took an approver action keep visibility after the request
-            // leaves their queue so status / audit trail can refresh on the UI.
             return query.Where(r =>
                 (hasOwn && (_currentUser.ServiceNumber != null && r.SubmittedByServiceNumber == _currentUser.ServiceNumber))
                 || (linkedLm && r.Status == RequestStatus.PendingApproval.GetDescription())

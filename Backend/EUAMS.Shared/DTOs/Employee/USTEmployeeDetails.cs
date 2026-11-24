@@ -47,6 +47,11 @@
         public bool IsManager { get; set; }
 
         public string ReportsToPostId { get; set; } = string.Empty;
+
+        public override string ToString()
+        {
+            return $"{FirstName} {Surname}";
+        }
     }
 }
 

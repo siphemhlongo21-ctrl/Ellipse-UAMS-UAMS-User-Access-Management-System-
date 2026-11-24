@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+﻿﻿import { useState, useEffect } from "react";
 import { Plus, Search, Loader } from "lucide-react";
 import { roleDefaultStatusFilter, canCreateAccessRequest, hasAppRole } from "../../utilities/request";
 import { getEmployeeRequests, getHcSystemsOfficerRequests, getICTManagerRequests, GetLineManagerRequestsByEmail, getRequests, getTrainingVerificationRequests } from "../../api/requestsApi";
@@ -37,8 +37,6 @@ function loadRoleQueue(session: UserSession, signal?: AbortSignal): Promise<Requ
 
     return Promise.resolve([]);
 }
-
-// â”€â”€â”€ Request List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function RequestList() {
 
@@ -113,12 +111,17 @@ export function RequestList() {
             || (r.employeeName?.toLowerCase().includes(searchQuery) ?? false)
             || (r.contractorName?.toLowerCase().includes(searchQuery) ?? false)
             || (r.serviceNumber?.toLowerCase().includes(searchQuery) ?? false)
-            || (r.department?.toLowerCase().includes(searchQuery) ?? false);
+            || (r.department?.toLowerCase().includes(searchQuery) ?? false)
+            || (r.permanentPostId?.toLowerCase().includes(searchQuery) ?? false)
+            || (r.temporaryPostId?.toLowerCase().includes(searchQuery) ?? false)
+            || (r.companyName?.toLowerCase().includes(searchQuery) ?? false)
+            || (r.contractor?.companyName?.toLowerCase().includes(searchQuery) ?? false);
         const matchEnv = lockedEnvs.length > 0 ? lockedEnvs.includes(r.environment as Env) : (envFilter === "ALL" || r.environment === envFilter);
         const matchStatus = effectiveStatusFilter === "all"
             || r.status === effectiveStatusFilter;
-        const matchFrom = !dateFrom || r.requestedDate >= dateFrom;
-        const matchTo = !dateTo || r.requestedDate <= dateTo;
+        
+        const matchFrom = !dateFrom || r.requestedDate.slice(0, 10) >= dateFrom.slice(0, 10);
+        const matchTo = !dateTo || r.requestedDate.slice(0, 10) <= dateTo.slice(0, 10);
         return matchSearch && matchEnv && matchStatus && matchFrom && matchTo;
     });
 
@@ -190,7 +193,7 @@ export function RequestList() {
                             className="flex-1 px-2 py-1.5 bg-muted/50 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent" />
                         {(dateFrom || dateTo) && (
                             <button onClick={() => { setDateFrom(""); setDateTo(""); }}
-                                className="text-[11px] text-foreground/40 hover:text-foreground px-1.5 py-1 border border-border rounded bg-white transition-colors">
+                                className="text-[11px] px-1.5 py-1 border border-border rounded bg-white transition-colors">
                                 Clear
                             </button>
                         )}

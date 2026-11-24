@@ -1,16 +1,15 @@
 ﻿using EUAMS.API.Security;
 using EUAMS.Shared.DTOs.Document;
-using EUAMS.Shared.DTOs.DocumentAudit;
-using EUAMS.Shared.DTOs.DocumentAccess;
-
 using EUAMS.Shared.Interfaces;
 using EUAMS.Shared.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EUAMS.API.Controllers
 {
     [Route("api/[controller]/[action]")]
     [ApiController]
+    [Authorize]
     public class DocumentsController : ControllerBase
     {
         private readonly IDocumentService _documentService;
@@ -148,29 +147,6 @@ namespace EUAMS.API.Controllers
                 throw;
             }
         }
-        [HttpGet]
-        [AuthorizePermission(PermissionCodes.DocumentUpload, PermissionCodes.RequestSearchAll)]
-        public async Task<ActionResult<List<DocumentDetails>>> GetArchivedRequestDocument(int requestId)
-        {
-            try
-            {
-                var result = await _documentService.GetArchivedRequestDocuments(requestId);
-                return Ok(result);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
-            }
-            catch (KeyNotFoundException)
-            {
-                return NotFound();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while retrieving archived request documents.");
-                throw;
-            }
-        }
 
         [HttpPut]
         [AuthorizePermission(PermissionCodes.DocumentUpload)]
@@ -216,41 +192,6 @@ namespace EUAMS.API.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while archiving document.");
-                throw;
-            }
-        }
-        [HttpPut]
-        [AuthorizePermission(PermissionCodes.DocumentUpload, PermissionCodes.RequestSearchAll)]
-        public async Task<ActionResult<bool>> RestoreDocument(int id)
-        {
-            try
-            {
-                var result = await _documentService.RestoreDocument(id);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while restoring document.");
-                throw;
-            }
-        }
-
-        [HttpGet]
-        [AuthorizePermission(PermissionCodes.DocumentView)]
-        public async Task<ActionResult<List<DocumentAuditDetails>>> GetDocumentAuditTrail(int id)
-        {
-            try
-            {
-                var result = await _documentService.GetDocumentAuditTrail(id);
-                return Ok(result);
-            }
-            catch (KeyNotFoundException)
-            {
-                return NotFound();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while retrieving document audit trail.");
                 throw;
             }
         }

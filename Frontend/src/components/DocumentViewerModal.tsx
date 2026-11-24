@@ -25,6 +25,28 @@ function nowStamp() {
   };
 }
 
+function makeAccessLogEntry(action: "Viewed" | "Downloaded", actorName: string): DocumentAccessLogEntry {
+  const idBase = Date.now();
+  return {
+    id: `${idBase}-${Math.random().toString(16).slice(2)}`,
+    actorName,
+    action,
+    at: new Date().toISOString(),
+  };
+}
+
+function formatAccessLogStamp(at: string) {
+  const d = new Date(at);
+  const isValid = !Number.isNaN(d.getTime());
+
+  return {
+    date: isValid ? d.toISOString().slice(0, 10) : at.slice(0, 10),
+    time: isValid
+      ? d.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
+      : "--:--",
+  };
+}
+
 function isImage(doc: ViewerDocument) {
   const t = (doc.contentType ?? "").toLowerCase();
   const n = doc.fileName.toLowerCase();
@@ -54,15 +76,7 @@ export function DocumentViewerModal({
   const totalPages = 2;
 
   useEffect(() => {
-    const stamp = nowStamp();
-    const entry: DocumentAccessLogEntry = {
-      user: viewerName,
-      role: viewerRole,
-      action: "Viewed",
-      date: stamp.date,
-      time: stamp.time,
-      document: doc.fileName,
-    };
+    const entry = makeAccessLogEntry("Viewed", viewerName);
     setLog(prev => [entry, ...prev]);
     onAccessLogged?.(entry);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- log once on open
@@ -79,12 +93,10 @@ export function DocumentViewerModal({
   const handleDownload = () => {
     const stamp = nowStamp();
     const entry: DocumentAccessLogEntry = {
-      user: viewerName,
-      role: viewerRole,
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      actorName: viewerName,
       action: "Downloaded",
-      date: stamp.date,
-      time: stamp.time,
-      document: doc.fileName,
+      at: new Date().toISOString(),
     };
     setLog(prev => [entry, ...prev]);
     onAccessLogged?.(entry);
@@ -300,32 +312,35 @@ export function DocumentViewerModal({
                 </div>
               ) : (
                 <ul className="divide-y divide-border/60">
-                  {log.map((entry, i) => (
-                    <li key={`${entry.date}-${entry.time}-${entry.action}-${i}`} className="px-4 py-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold text-foreground">{entry.user}</p>
-                          {entry.role && (
-                            <p className="text-[10px] text-foreground/45">{entry.role}</p>
-                          )}
+                  {log.map((entry, i) => {
+                    const stamp = formatAccessLogStamp(entry.at);
+                    return (
+                      <li key={`${entry.id ?? `${stamp.date}-${stamp.time}-${entry.action}-${i}`}`} className="px-4 py-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold text-foreground">{entry.actorName}</p>
+                            {viewerRole && (
+                              <p className="text-[10px] text-foreground/45">{viewerRole}</p>
+                            )}
+                          </div>
+                          <span
+                            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold border ${
+                              entry.action === "Downloaded"
+                                ? "border-blue-200 bg-blue-50 text-blue-700"
+                                : entry.action === "Uploaded"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border-slate-200 bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {entry.action}
+                          </span>
                         </div>
-                        <span
-                          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold border ${
-                            entry.action === "Downloaded"
-                              ? "border-blue-200 bg-blue-50 text-blue-700"
-                              : entry.action === "Uploaded"
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-slate-200 bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {entry.action}
-                        </span>
-                      </div>
-                      <p className="mt-1 font-mono text-[10px] text-foreground/40">
-                        {entry.date} · {entry.time}
-                      </p>
-                    </li>
-                  ))}
+                        <p className="mt-1 font-mono text-[10px] text-foreground/40">
+                          {stamp.date} · {stamp.time}
+                        </p>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

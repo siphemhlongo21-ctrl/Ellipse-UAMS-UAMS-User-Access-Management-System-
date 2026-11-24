@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace EUAMS.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class InitMigration221 : Migration
+    public partial class Phase1Migrations : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -43,17 +43,17 @@ namespace EUAMS.Data.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     IdentificationNumber = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Surname = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    FirstName = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     EmailAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     CompanyName = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ResponsibleManager = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     BusinessJustification = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     StartDate = table.Column<DateTime>(type: "datetime2", nullable: false),
                     EndDate = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    Active = table.Column<bool>(type: "bit", nullable: false),
+                    Surname = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FirstName = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Department = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Branch = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Active = table.Column<bool>(type: "bit", nullable: false)
+                    Branch = table.Column<string>(type: "nvarchar(max)", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -65,16 +65,16 @@ namespace EUAMS.Data.Migrations
                 columns: table => new
                 {
                     EmailAddress = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    PostId = table.Column<int>(type: "int", nullable: false),
-                    Surname = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    FirstName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    PostId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ContactNumber = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ServiceNumber = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Department = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Branch = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Designation = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ActiveDirectoryUsername = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false)
+                    IsActive = table.Column<bool>(type: "bit", nullable: false),
+                    Surname = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FirstName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Department = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Branch = table.Column<string>(type: "nvarchar(max)", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -152,8 +152,8 @@ namespace EUAMS.Data.Migrations
                     ContractId = table.Column<int>(type: "int", nullable: true),
                     EmployeeEmail = table.Column<string>(type: "nvarchar(450)", nullable: true),
                     TemporaryPosition = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    TemporaryPostId = table.Column<int>(type: "int", nullable: true),
-                    PermanentPostId = table.Column<int>(type: "int", nullable: true),
+                    TemporaryPostId = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    PermanentPostId = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     PositionToCopy = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     MissingDocuments = table.Column<bool>(type: "bit", nullable: true),
                     LineManagerApproved = table.Column<bool>(type: "bit", nullable: true),
@@ -342,7 +342,7 @@ namespace EUAMS.Data.Migrations
                     ActionerServiceNumber = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ActionDate = table.Column<DateTime>(type: "datetime2", nullable: false),
                     RequestId = table.Column<int>(type: "int", nullable: false),
-                    ApproverRole = table.Column<int>(type: "int", nullable: false),
+                    ApproverRole = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ActionType = table.Column<string>(type: "nvarchar(max)", nullable: false)
                 },
                 constraints: table =>
@@ -448,32 +448,6 @@ namespace EUAMS.Data.Migrations
                 });
 
             migrationBuilder.InsertData(
-                table: "AppUsers",
-                columns: new[] { "Id", "ActiveDirectoryUsername", "CreatedAt", "CreatedBy", "DisplayName", "Email", "EmployeeEmail", "IsActive", "LastLoginAt", "LastModifiedAt", "LastModifiedBy", "ServiceNumber" },
-                values: new object[,]
-                {
-                    { 101, "DEV\\euams.employee", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Eve Employee", "employee.demo@ethekwini.gov.za", "employee.demo@ethekwini.gov.za", true, null, null, null, "employee.demo@ethekwini.gov.za" },
-                    { 102, "DEV\\euams.lm", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Leo Manager", "lm.demo@ethekwini.gov.za", "lm.demo@ethekwini.gov.za", true, null, null, null, "lm.demo@ethekwini.gov.za" },
-                    { 103, "DEV\\euams.training", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Tina Trainer", "training.demo@ethekwini.gov.za", "training.demo@ethekwini.gov.za", true, null, null, null, "training.demo@ethekwini.gov.za" },
-                    { 104, "DEV\\euams.ict", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Ian Ict", "ict.demo@ethekwini.gov.za", "ict.demo@ethekwini.gov.za", true, null, null, null, "ict.demo@ethekwini.gov.za" },
-                    { 105, "DEV\\euams.hc", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Helen HcSystems", "hc.demo@ethekwini.gov.za", "hc.demo@ethekwini.gov.za", true, null, null, null, "hc.demo@ethekwini.gov.za" },
-                    { 106, "DEV\\euams.admin", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, "Ada Admin", "admin.demo@ethekwini.gov.za", "admin.demo@ethekwini.gov.za", true, null, null, null, "admin.demo@ethekwini.gov.za" }
-                });
-
-            migrationBuilder.InsertData(
-                table: "Employees",
-                columns: new[] { "EmailAddress", "ActiveDirectoryUsername", "Branch", "ContactNumber", "Department", "Designation", "FirstName", "IsActive", "PostId", "ServiceNumber", "Surname" },
-                values: new object[,]
-                {
-                    { "admin.demo@ethekwini.gov.za", "DEV\\euams.admin", "ICT", "0310001006", "Auxiliary services", "System Admin", "Ada", true, 1006, "admin.demo@ethekwini.gov.za", "Admin" },
-                    { "employee.demo@ethekwini.gov.za", "DEV\\euams.employee", "Customer Services", "0310001001", "Customer Services", "Clerk", "Eve", true, 1001, "employee.demo@ethekwini.gov.za", "Employee" },
-                    { "hc.demo@ethekwini.gov.za", "DEV\\euams.hc", "Administration", "0310001005", "Auxiliary services", "HC Systems Officer", "Helen", true, 1005, "hc.demo@ethekwini.gov.za", "HcSystems" },
-                    { "ict.demo@ethekwini.gov.za", "DEV\\euams.ict", "ICT", "0310001004", "Auxiliary services", "ICT Manager", "Ian", true, 1004, "ict.demo@ethekwini.gov.za", "Ict" },
-                    { "lm.demo@ethekwini.gov.za", "DEV\\euams.lm", "Customer Services", "0310001002", "Customer Services", "Line Manager", "Leo", true, 1002, "lm.demo@ethekwini.gov.za", "Manager" },
-                    { "training.demo@ethekwini.gov.za", "DEV\\euams.training", "SHERQ & Training", "0310001003", "Technical Support", "Training Centre", "Tina", true, 1003, "training.demo@ethekwini.gov.za", "Trainer" }
-                });
-
-            migrationBuilder.InsertData(
                 table: "Permissions",
                 columns: new[] { "Id", "Active", "Code", "Description", "Name" },
                 values: new object[,]
@@ -524,7 +498,10 @@ namespace EUAMS.Data.Migrations
                     { 17, "TERM_DELETE_SIGNON", true, "Terminate & Delete Signon" },
                     { 18, "TERM_SECONDARY", true, "Terminate Secondary Position" },
                     { 19, "UPDATE_EMPLOYEE_RECORD", true, "Update Existing Employee Record Details" },
-                    { 20, "OTHER", true, "Other" }
+                    { 20, "OTHER", true, "Other" },
+                    { 21, "TERMINATE", true, "Terminate" },
+                    { 22, "DELETE_SIGNON", true, "Delete Sign On" },
+                    { 23, "UNLOCK_SIGNON", true, "Unlocking of Sign On's" }
                 });
 
             migrationBuilder.InsertData(
@@ -598,20 +575,6 @@ namespace EUAMS.Data.Migrations
                     { 18, 6, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), false },
                     { 19, 6, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), false },
                     { 21, 6, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), false }
-                });
-
-            migrationBuilder.InsertData(
-                table: "UserRoles",
-                columns: new[] { "Id", "AssignedAt", "AssignedByServiceNumber", "EffectiveFrom", "EffectiveTo", "RoleId", "ServiceNumber" },
-                values: new object[,]
-                {
-                    { 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin.demo@ethekwini.gov.za", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 1, "employee.demo@ethekwini.gov.za" },
-                    { 2, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin.demo@ethekwini.gov.za", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 2, "lm.demo@ethekwini.gov.za" },
-                    { 3, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin.demo@ethekwini.gov.za", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 1, "lm.demo@ethekwini.gov.za" },
-                    { 4, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin.demo@ethekwini.gov.za", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 3, "training.demo@ethekwini.gov.za" },
-                    { 5, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin.demo@ethekwini.gov.za", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 4, "ict.demo@ethekwini.gov.za" },
-                    { 6, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin.demo@ethekwini.gov.za", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 5, "hc.demo@ethekwini.gov.za" },
-                    { 7, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin.demo@ethekwini.gov.za", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), null, 6, "admin.demo@ethekwini.gov.za" }
                 });
 
             migrationBuilder.CreateIndex(

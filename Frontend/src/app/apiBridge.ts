@@ -280,6 +280,8 @@ export function mapRequestDetailsToApp(r: RequestDetails): AppRequest {
     email: isContractor ? (c?.emailAddress ?? r.contractorEmailAddress ?? undefined) : (r.employeeEmail ?? undefined),
     adUsername: r.activeDirectoryUsername ?? undefined,
     accessLevel: r.userAccessType ?? undefined,
+    postId: (r.temporaryPostId != null ? String(r.temporaryPostId) : undefined)
+      ?? (r.permanentPostId != null ? String(r.permanentPostId) : undefined) ?? undefined,
     ellipsePosition: r.ellipsePosition ?? undefined,
     menuAccess: r.menuAccess ?? undefined,
     businessJustification: r.businessJustification ?? undefined,
@@ -363,7 +365,6 @@ async function createAndSubmit(payload: NewRequestDetails, identityFile?: File |
         identityFile,
       );
     } catch {
-      // Document upload is best-effort for terminations; required for create flows.
       if (!String(payload.requestType ?? "").toLowerCase().includes("terminate")) {
         throw new Error("Request created but identity document upload failed.");
       }
@@ -465,9 +466,7 @@ export async function submitContractorRequest(
 ): Promise<AppRequest> {
   try {
     const payload: NewRequestDetails = {
-      requestType: input.isTermination
-        ? "Terminate & Delete Signon"
-        : "New Employee & Create Signon",
+      requestType: input.requestType,
       environment: mapEnvironmentToApi(input.environment),
       userAccessType: input.isTermination ? null : input.userAccessType || "Temporary/Acting",
       ellipsePosition: input.isTermination ? "N/A" : input.ellipsePosition?.trim() || "N/A",
@@ -503,30 +502,34 @@ export async function submitContractorRequest(
 
     const created = await requestsApi.create({ ...payload, submit: false });
 
+    const uploadErrors: string[] = [];
     if (!input.isTermination) {
+      const uploads: Array<{ label: string; documentType: string; documentCategory: string; file: File }> = [];
       if (input.identityFile) {
-        await documentsApi.upload(created.id, "Identity Document", "ID / Passport", input.identityFile);
+        uploads.push({ label: "Identity Document", documentType: "Identity Document", documentCategory: "ID / Passport", file: input.identityFile });
       }
       if (input.contractorCardFile) {
-        await documentsApi.upload(
-          created.id,
-          "Contractor Identification Card",
-          "Contractor Identification Card",
-          input.contractorCardFile,
-        );
+        uploads.push({ label: "Contractor Identification Card", documentType: "Contractor Identification Card", documentCategory: "Contractor Identification Card", file: input.contractorCardFile });
       }
       if (input.contractFile) {
-        await documentsApi.upload(
-          created.id,
-          "Contract",
-          "Contract Documentation",
-          input.contractFile,
-        );
+        uploads.push({ label: "Contract", documentType: "Contract", documentCategory: "Contract Documentation", file: input.contractFile });
+      }
+      for (const u of uploads) {
+        try {
+          await documentsApi.upload(created.id, u.documentType, u.documentCategory, u.file);
+        } catch (uploadErr) {
+          const detail = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          uploadErrors.push(`${u.label}: ${detail}`);
+        }
       }
     }
 
     const refreshed = await requestsApi.getById(created.id).catch(() => created);
-    return mapRequestDetailsToApp(refreshed);
+    const mapped = mapRequestDetailsToApp(refreshed);
+    if (uploadErrors.length > 0) {
+      (mapped as AppRequest & { documentUploadWarnings?: string[] }).documentUploadWarnings = uploadErrors;
+    }
+    return mapped;
   } catch (err) {
     throw new Error(apiErrorMessage(err));
   }

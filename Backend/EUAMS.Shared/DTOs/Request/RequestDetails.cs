@@ -101,5 +101,8 @@ namespace EUAMS.Shared.DTOs.Request
         public string? SubmittedByServiceNumber { get; set; }
 
         public ContractorDetails? Contractor { get; set; }
-    }
+
+        public List<string>? DocumentResubmissionRequests {  get; set; }
+
+	}
 }

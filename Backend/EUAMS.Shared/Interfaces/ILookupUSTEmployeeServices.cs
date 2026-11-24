@@ -17,5 +17,11 @@ namespace EUAMS.Shared.Interfaces
         Task<USTEmployeeDetails> GetEmployeeManagerDetailsByEmployeeServiceNumber(string serviceNumber);
 
         Task<USTEmployeeDetails> GetEmployeeManagerDetailsByEmployeeEmail(string employeeEmail);
+
+        Task<List<USTEmployeeDetails>> GetIctManagers();
+
+        Task<List<USTEmployeeDetails>> GetTrainingCenterRepresentatives();
+
+        Task<List<USTEmployeeDetails>> GetHcSystemOfficer();
     }
 }

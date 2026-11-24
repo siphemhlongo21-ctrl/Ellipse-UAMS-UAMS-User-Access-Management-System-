@@ -84,7 +84,7 @@ export function revokeRole(query: {
   roleCode: string;
 }) {
   return apiRequest("/api/Roles/RevokeRole", {
-    method: "DELETE",
+    method: "PATCH",
     query,
   });
 }

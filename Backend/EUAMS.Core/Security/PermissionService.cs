@@ -14,7 +14,7 @@ namespace EUAMS.Core.Security
             _db = db;
         }
 
-        public async Task<IReadOnlyCollection<string>> GetPermissionsForRole(
+        public async Task<List<string>> GetPermissionsForRole(
             string roleName,
             CancellationToken cancellationToken = default)
         {
@@ -24,18 +24,19 @@ namespace EUAMS.Core.Security
                     o => o.Name.ToLower() == roleName.ToLower() || o.Code.ToLower() == roleName.ToLower(),
                     cancellationToken);
 
-            if (role == null) return Array.Empty<string>();
+            if (role == null) return new List<string>();
 
             return await _db.RolePermissions
                 .AsNoTracking()
                 .Where(rp => rp.RoleId == role.Id)
                 .Include(rp => rp.Permission)
+                .Where(o => o.Permission.Active)
                 .Select(rp => rp.Permission.Code)
                 .Distinct()
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<IReadOnlyCollection<string>> GetPermissionsForUserAsync(
+        public async Task<List<string>> GetPermissionsForUserAsync(
       string serviceNumber,
       CancellationToken cancellationToken = default)
         {
@@ -49,11 +50,13 @@ namespace EUAMS.Core.Security
                 .Where(ur => ur.EffectiveFrom == null || ur.EffectiveFrom <= now)
                 .Where(ur => ur.EffectiveTo == null || ur.EffectiveTo >= now)
                 .SelectMany(ur => ur.Role.RolePermissions)
+                .Include(o => o.Permission)
+                .Where(o => o.Permission.Active)
                 .Select(rp => rp.Permission.Code)
                 .Distinct()
                 .ToListAsync(cancellationToken);
         }
-        public async Task<IReadOnlyCollection<string>> GetRolesForUserAsync(string serviceNumber, CancellationToken cancellationToken = default)
+        public async Task<List<string>> GetRolesForUserAsync(string serviceNumber, CancellationToken cancellationToken = default)
 
         {
             var now = DateTime.UtcNow;
@@ -67,7 +70,7 @@ namespace EUAMS.Core.Security
                    .Distinct()
                    .ToListAsync(cancellationToken);
         }
-        public async Task<IReadOnlyCollection<PermissionDetails>> GetPermissionsAsync(string? permissionName = null, CancellationToken cancellationToken = default)
+        public async Task<List<PermissionDetails>> GetPermissionsAsync(string? permissionName = null, CancellationToken cancellationToken = default)
         {
             permissionName = permissionName?.Trim();
 

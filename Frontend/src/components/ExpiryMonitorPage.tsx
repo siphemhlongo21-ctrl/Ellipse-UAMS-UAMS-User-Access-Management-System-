@@ -30,7 +30,11 @@ export function ExpiryMonitorPage({
             || r.employeeName?.toLowerCase().includes(q)
             || r.id.toString().toLowerCase().includes(q)
             || r.department?.toLowerCase().includes(q)
-            || (r.companyName ?? "").toLowerCase().includes(q);
+            || (r.companyName ?? "").toLowerCase().includes(q)
+            || (r.permanentPostId?.toString().toLowerCase().includes(q) ?? false)
+            || (r.temporaryPostId?.toString().toLowerCase().includes(q) ?? false)
+            || (r.companyName?.toLowerCase().includes(q) ?? false)
+            || (r.contractor?.companyName?.toLowerCase().includes(q) ?? false);
         const days = r.endDate ? expiryDaysLeft(r.endDate) : 999;
         const matchUrgency =
             urgencyFilter === "all" ? true :

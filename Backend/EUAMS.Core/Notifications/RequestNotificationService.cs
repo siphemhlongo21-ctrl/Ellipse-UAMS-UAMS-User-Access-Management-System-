@@ -1,578 +1,488 @@
-using EUAMS.Core.Extensions;
+﻿using EUAMS.Core.Extensions;
 using EUAMS.Data;
 using EUAMS.Data.Entities;
+using EUAMS.Data.Entities.Base;
 using EUAMS.Data.Entities.CesarDb;
 using EUAMS.Shared.DTOs.Employee;
 using EUAMS.Shared.Enums;
 using EUAMS.Shared.Interfaces;
-using EUAMS.Shared.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Data;
 
 namespace EUAMS.Core.Notifications
 {
-    public class RequestNotificationService : IRequestNotificationService
+    public class RequestNotificationService
     {
         private readonly EuamsDbContext _db;
         private readonly ILogger<RequestNotificationService> _logger;
         private readonly ILookupUSTEmployeeServices _lookupUSTEmployeeDetails;
         private readonly CesarDbContext _cesarDbContext;
+        private readonly ICurrentUserService _currentUser;
 
         public RequestNotificationService(
             EuamsDbContext db,
             ILogger<RequestNotificationService> logger,
             ILookupUSTEmployeeServices lookupUSTEmployeeDetails,
-            CesarDbContext cesarDbContext)
+            CesarDbContext cesarDbContext,
+            ICurrentUserService currentUser)
         {
             _db = db;
             _logger = logger;
             _lookupUSTEmployeeDetails = lookupUSTEmployeeDetails;
             _cesarDbContext = cesarDbContext;
+            _currentUser = currentUser;
         }
 
-        public async Task NotifySubmittedAsync(
-            int requestId,
-            string? requestNumber,
-            string? requesterEmail,
-            CancellationToken cancellationToken = default)
+        public async Task NotifySubmittedAsync(Request request, bool notifyLineManager = false, CancellationToken cancellationToken = default)
         {
-            var emailContext = await LoadContextAsync(requestId, requestNumber, requesterEmail, cancellationToken);
+            var requestSubmitter = await GetRequestSubmitter(request);
+            var requestor = GetRequestRequestor(request);
+            var lineManager = await GetRequestLineManager(request);
 
-            var requesterSubject = $"Ellipse Access Request Submitted - {emailContext.RequestNumber}";
-            var requesterBody = EmailMessageBuilder.Body(
-                EmailMessageBuilder.Greeting(emailContext.RequestorName),
-                "Your Ellipse Access Request has been successfully submitted and is awaiting processing.",
-                EmailMessageBuilder.DetailsSection(
-                    "Request Details",
-                    EmailMessageBuilder.Bullet("Request Number", emailContext.RequestNumber),
-                    EmailMessageBuilder.Bullet("Request Type", emailContext.RequestType),
-                    EmailMessageBuilder.Bullet("Environment", emailContext.Environment),
-                    EmailMessageBuilder.Bullet("Submitted By", emailContext.RequestorName),
-                    EmailMessageBuilder.Bullet("Date Submitted", emailContext.SubmittedAt.ToString("yyyy-MM-dd")),
-                    EmailMessageBuilder.Bullet("Time Submitted", emailContext.SubmittedAt.ToLocalTime().ToString("HH:mm"))),
-                "Current Status: Awaiting Line Manager Approval",
-                "You may track the progress of this request through the Ellipse User Access Management System.");
+            var isTermination = (request.RequestType ?? string.Empty).Contains("terminate", StringComparison.OrdinalIgnoreCase);
+            string currentStatus;
 
-            var approverSubject = $"Ellipse Access Request Awaiting Your Approval - {emailContext.RequestNumber}";
-            var approverBody = EmailMessageBuilder.Body(
-                EmailMessageBuilder.Greeting(emailContext.LineManagerName),
-                "An Ellipse Access Request has been assigned to you for review.",
-                EmailMessageBuilder.DetailsSection(
-                    "Request Details",
-                    EmailMessageBuilder.Bullet("Request Number", emailContext.RequestNumber),
-                    EmailMessageBuilder.Bullet("Employee/Contractor", emailContext.RequestorName),
-                    EmailMessageBuilder.Bullet("Request Type", emailContext.RequestType),
-                    EmailMessageBuilder.Bullet("Environment", emailContext.Environment)),
-                "Please log into the Ellipse User Access Management System to review and action the request.");
-
-            await SendToEmailsAsync(
-                new[] { emailContext.RequestorEmail },
-                requesterSubject, requesterBody, requestId, cancellationToken);
-
-            if (emailContext.ShouldNotifyLineManager)
+            if (isTermination)
             {
-                await SendToEmailsAsync(
-                    new[] { emailContext.LineManagerEmail },
-                    approverSubject, approverBody, requestId, cancellationToken);
+                var hcOfficers = await _lookupUSTEmployeeDetails.GetHcSystemOfficer();
+                var hcOfficerName = hcOfficers.FirstOrDefault()?.ToString() ?? "HC Systems Officer";
+                currentStatus = $"Current Status: Awaiting HC Systems Officer Termination by {hcOfficerName}";
+            }
+            else
+            {
+                if (request.Contractor != null && request.Environment == Environments.Production.GetDescription())
+                {
+                    currentStatus = "Current Status: Awaiting Training Verification";
+                }
+                else if(request.Contractor != null)
+                {
+					currentStatus = "Current Status: Awaiting ICT Manager Approval";
+				}
+				else
+					currentStatus = $"Current Status: Awaiting Line Manager Approval by {lineManager}";
+			}
+
+            await SendEmployeeEmail(requestor, request, requestSubmitter, cancellationToken, lineManager.ToString(), currentStatus);
+            if (notifyLineManager)
+                await SendLineManagerReviewEmail(requestor, request, requestSubmitter, cancellationToken, lineManager);
+        }
+
+        private Requestor GetRequestRequestor(Request request)
+        {
+            var requestor = request.Employee ?? request.Contractor as Requestor;
+
+            if (requestor == null) throw new KeyNotFoundException("Invalid requestor details");
+
+            return requestor;
+        }
+
+        private async Task<USTEmployeeDetails> GetRequestSubmitter(Request request)
+        {
+            var requestSubmitter = await _lookupUSTEmployeeDetails.GetEmployeeDetailsByServiceNumber(request.SubmittedByServiceNumber);
+
+            if (requestSubmitter == null) throw new KeyNotFoundException($"Invalid request submitter service number {request.SubmittedByServiceNumber}");
+
+            return requestSubmitter;
+        }
+
+        private async Task<USTEmployeeDetails> GetRequestLineManager(Request request)
+        {
+            USTEmployeeDetails? lineManager = null;
+
+            if (request.Employee != null)
+                lineManager = await _lookupUSTEmployeeDetails.GetEmployeeManagerDetailsByEmployeeEmail(request.Employee.EmailAddress);
+
+            if (request.Contractor != null)
+                lineManager = await _lookupUSTEmployeeDetails.GetEmployeeDetailsByServiceNumber(request.Contractor.ResponsibleManager);
+
+            if (lineManager == null) throw new KeyNotFoundException("Invalid request line manager details");
+
+            return lineManager;
+        }
+
+        private async Task SendEmployeeEmail(Requestor requestor, Request request, USTEmployeeDetails requestSubmitter, CancellationToken cancellationToken, string lineManager, string currentStatus)
+        {
+            var requesterSubject = $"Ellipse Access Request Submitted - {request.RequestNumber ?? request.Id.ToString()}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/EmployeeNewRequest.html");
+            var emailBody = File.ReadAllText(templatePath);
+
+            emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+                .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+                .Replace("{{req_type}}", request.RequestType)
+                .Replace("{{environment}}", request.Environment)
+                .Replace("{{submitted_by}}", $"{requestSubmitter.FirstName} {requestSubmitter.Surname}")
+                .Replace("{{submitted_date}}", request.RequestedDate.ToString("yyyy-MM-dd"))
+                .Replace("{{submitted_time}}", request.RequestedDate.ToLocalTime().ToString("HH:mm"))
+                .Replace("{{line_manager}}", lineManager)
+                .Replace("{{current_status}}", currentStatus);
+
+            await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, requesterSubject, emailBody, request.Id, cancellationToken, request.RequestNumber);
+        }
+
+        private async Task SendLineManagerReviewEmail(Requestor requestor, Request request, USTEmployeeDetails requestSubmitter, CancellationToken cancellationToken, USTEmployeeDetails? lineManager)
+        {
+            var subject = $"Ellipse Access Request Awaiting Your Approval - {request.RequestNumber ?? request.Id.ToString()}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/LineManagerPending.html");
+            var emailBody = File.ReadAllText(templatePath);
+
+            emailBody = emailBody.Replace("{{name}}", lineManager != null ? lineManager.ToString() : _currentUser.DisplayName)
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{req_type}}", request.RequestType)
+               .Replace("{{environment}}", request.Environment)
+               .Replace("{{employee_name}}", requestor.ToString());
+
+            await SendToEmailsAsync(new[] { lineManager != null ? lineManager.Email : _currentUser.Email }, subject, emailBody, request.Id, cancellationToken, request.RequestNumber);
+        }
+
+        private async Task SendAwaitingLineMangagerApprovalEmail(Request request, bool isProduction, CancellationToken cancellationToken)
+        {
+            var requestor = GetRequestRequestor(request);
+
+            var currentStatus = isProduction
+                ? RequestStatus.TrainingVerificationPending.GetDescription()
+                : RequestStatus.ICTManagerApprovalPending.GetDescription();
+
+            var subject = $"Ellipse Access Request Approved by Line Manager - {request.RequestNumber ?? request.Id.ToString()}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/ApprovedRequest.html");
+            var emailBody = File.ReadAllText(templatePath);
+
+            emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{approver}}", _currentUser.DisplayName)
+               .Replace("{{current_req_status}}", currentStatus);
+
+            await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
+        }
+
+        private async Task SendAwaitingIctManagerApprovalEmail(Request request, CancellationToken cancellationToken)
+        {
+            var ictManagers = await _lookupUSTEmployeeDetails.GetIctManagers();
+            var subject = $"Test/Development Access Request Awaiting Approval - {request.RequestNumber ?? request.Id.ToString()}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/IctManagerPending.html");
+
+            foreach (var ictManager in ictManagers)
+            {
+                var emailBody = File.ReadAllText(templatePath);
+
+                emailBody = emailBody.Replace("{{name}}", ictManager.ToString())
+                   .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString());
+
+                await SendToEmailsAsync(new[] { ictManager.Email }, subject, emailBody, request.Id, cancellationToken);
             }
         }
 
-        public async Task NotifyStepAdvancedAsync(
-            int requestId,
-            string? requestNumber,
-            string? requesterEmail,
-            string fromStatus,
-            string toStatus,
-            StatusHistoryEvent statusHistoryEvent,
-            CancellationToken cancellationToken = default)
+        private async Task SendAwaitingTrainingVerificationEmail(Request request, CancellationToken cancellationToken)
         {
-            var emailContext = await LoadContextAsync(requestId, requestNumber, requesterEmail, cancellationToken);
+            var requestor = GetRequestRequestor(request);
+            var trainingRepresentatives = await _lookupUSTEmployeeDetails.GetTrainingCenterRepresentatives();
+            var subject = $"Ellipse Access Request Awaiting Training Verification - {request.RequestNumber ?? request.Id.ToString()}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/TrainingVerificationPending.html");
+
+            foreach (var trainingRepresentstive in trainingRepresentatives)
+            {
+                var emailBody = File.ReadAllText(templatePath);
+
+                emailBody = emailBody.Replace("{{name}}", trainingRepresentstive.ToString())
+                   .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+                   .Replace("{{req_type}}", request.RequestType)
+                   .Replace("{{employee_name}}", requestor.ToString());
+
+                await SendToEmailsAsync(new[] { trainingRepresentstive.Email }, subject, emailBody, request.Id, cancellationToken);
+            }
+        }
+
+        private async Task SendTrainingVerifiedEmail(Request request, CancellationToken cancellationToken)
+        {
+            var requestor = GetRequestRequestor(request);
+            var subject = $"Training Successfully Verified - {request.RequestNumber ?? request.Id.ToString()}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/TrainingVerified.html");
+            var emailBody = File.ReadAllText(templatePath);
+
+            emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{approver}}", _currentUser.DisplayName);
+
+            await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
+        }
+
+        private async Task SendIctManagerApprovedEmail(Request request, CancellationToken cancellationToken)
+        {
+            var requestor = GetRequestRequestor(request);
+            var subject = $"Ellipse Access Request Approved by ICT Manager  - {request.RequestNumber ?? request.Id.ToString()}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/IctManagerApproved.html");
+            var emailBody = File.ReadAllText(templatePath);
+
+            emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{approver}}", _currentUser.DisplayName);
+
+            await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
+        }
+
+        public async Task NotifyStepAdvancedAsync(Request request, StatusHistoryEvent statusHistoryEvent, CancellationToken cancellationToken = default)
+        {
+            if (request == null) throw new KeyNotFoundException($"Invalid request  number {request.RequestNumber ?? request.Id.ToString()}");
+
+            var isProductionRequest = string.Equals(request.Environment, "Production", StringComparison.OrdinalIgnoreCase);
+            var isTerminateRequest = request.RequestType.ToLower().Contains("terminate");
+
+            if (statusHistoryEvent == StatusHistoryEvent.LineManagerCreatedRequest)
+            {
+                if(isTerminateRequest)
+                {
+                    await SendHcOfficerAwaitingImplementation(request, cancellationToken);
+
+                    return;
+                }
+
+                if (!isProductionRequest)
+                    await SendAwaitingIctManagerApprovalEmail(request, cancellationToken);
+                else
+                    await SendAwaitingTrainingVerificationEmail(request, cancellationToken);
+
+                return;
+            }
 
             if (statusHistoryEvent == StatusHistoryEvent.LineManagerApproved)
             {
-                var isProduction = string.Equals(emailContext.Environment, "Production", StringComparison.OrdinalIgnoreCase);
-                var currentStatus = isProduction
-                    ? "Awaiting Training Verification"
-                    : "Awaiting ICT Manager Approval";
+                await SendAwaitingLineMangagerApprovalEmail(request, isProductionRequest, cancellationToken);
 
-                // Template 3 - requestor
-                var approveSubject = $"Ellipse Access Request Approved by Line Manager - {emailContext.RequestNumber}";
-                var approvedBody = EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(emailContext.RequestorName),
-                    "Your Ellipse Access Request has been approved by the Line Manager.",
-                    $"Request Number: {emailContext.RequestNumber}",
-                    "The request has now progressed to the next stage of the workflow.",
-                    $"Current Status: {currentStatus}");
-
-                await SendToEmailsAsync(
-                    new[] { emailContext.RequestorEmail },
-                    approveSubject,
-                    approvedBody,
-                    requestId,
-                    cancellationToken);
+                if (!isProductionRequest)
+                    await SendAwaitingIctManagerApprovalEmail(request, cancellationToken);
+                else
+                    await SendAwaitingTrainingVerificationEmail(request, cancellationToken);
 
                 return;
             }
 
             if (statusHistoryEvent == StatusHistoryEvent.TrainingVerified)
             {
-                var subject = $"Training Successfully Verified - {emailContext.RequestNumber}";
-                var body = EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(emailContext.RequestorName),
-                    "Training verification has been successfully completed for your Ellipse Access Request.",
-                    $"Request Number: {emailContext.RequestNumber}",
-                    "The request has now moved to the implementation stage.",
-                    "Current Status: Awaiting HC Systems Officer Action");
+                await SendTrainingVerifiedEmail(request, cancellationToken);
+                await SendHcOfficerAwaitingImplementation(request, cancellationToken);
 
-                await SendToEmailsAsync(
-                    new[] { emailContext.RequestorEmail },
-                    subject,
-                    body,
-                    requestId,
-                    cancellationToken);
                 return;
             }
 
             if (statusHistoryEvent == StatusHistoryEvent.ICTManagerApproved)
             {
-                var approveSubject = $"Ellipse Access Request Approved by ICT Manager - {emailContext.RequestNumber}";
-                var approvedBody = EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(emailContext.RequestorName),
-                    "Your Ellipse Access Request has been approved by the ICT Manager.",
-                    $"Request Number: {emailContext.RequestNumber}",
-                    "The request has now progressed to the next stage of the workflow.",
-                    "Current Status: Awaiting HC Systems Officer Action");
-
-                await SendToEmailsAsync(
-                    new[] { emailContext.RequestorEmail },
-                    approveSubject,
-                    approvedBody,
-                    requestId,
-                    cancellationToken);
+                await SendIctManagerApprovedEmail(request, cancellationToken);
+                await SendHcOfficerAwaitingImplementation(request, cancellationToken);
 
                 return;
             }
-
-            // Other events (resubmit / other) - leave generic until later stories
-            var requesterSubject = $"Ellipse request {emailContext.RequestNumber} updated";
-            var requesterBody = EmailMessageBuilder.Body(
-                EmailMessageBuilder.Greeting(emailContext.RequestorName),
-                $"Your Ellipse access request {emailContext.RequestNumber} advanced.",
-                $"From: {fromStatus}",
-                $"To: {toStatus}",
-                $"Event: {statusHistoryEvent}");
-
-            await SendToEmailsAsync(
-                new[] { emailContext.RequestorEmail },
-                requesterSubject,
-                requesterBody,
-                requestId,
-                cancellationToken);
         }
 
-        public async Task NotifyRejectedAsync(
-            int requestId,
-            string? requestNumber,
-            string? requesterEmail,
-            DefaultRole role,
-            string? reason,
-            CancellationToken cancellationToken = default)
+        private async Task SendHcOfficerAwaitingImplementation(Request request, CancellationToken cancellationToken)
         {
-            var emailContext = await LoadContextAsync(requestId, requestNumber, requesterEmail, cancellationToken);
+            var requestor = GetRequestRequestor(request);
+            var hcSystemOfficer = await _lookupUSTEmployeeDetails.GetHcSystemOfficer();
+            var subject = $"Ellipse Access Request Awaiting Your Approval  - {request.RequestNumber ?? request.Id.ToString()}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/HcOfficerPendingRequest.html");
+
+            foreach (var officer in hcSystemOfficer)
+            {
+                var emailBody = File.ReadAllText(templatePath);
+
+                emailBody = emailBody.Replace("{{name}}", officer.ToString())
+                   .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+                   .Replace("{{req_type}}", request.RequestType)
+                   .Replace("{{environment}}", request.Environment)
+                   .Replace("{{employee_name}}", requestor.ToString());
+
+                await SendToEmailsAsync(new[] { officer.Email }, subject, emailBody, request.Id, cancellationToken);
+            }
+        }
+
+        public async Task NotifyRejectedAsync(DefaultRole role, Request request, CancellationToken cancellationToken = default)
+        {
+            var requestor = GetRequestRequestor(request);
 
             if (role == DefaultRole.LineManager)
             {
-                var subject = $"Ellipse Access Request Rejected - {emailContext.RequestNumber}";
-                var body = EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(emailContext.RequestorName),
-                    "Your Ellipse Access Request has been rejected by the Line Manager.",
-                    EmailMessageBuilder.DetailsSection(
-                        "Request Details",
-                        EmailMessageBuilder.Bullet("Request Number", emailContext.RequestNumber),
-                        EmailMessageBuilder.Bullet("Request Type", emailContext.RequestType)),
-                    "Comments",
-                    string.IsNullOrWhiteSpace(reason) ? "-" : reason,
-                    "This request has now been closed.",
-                    "If access is still required, a new request must be submitted.");
+                var subject = $"Ellipse Access Request Rejected - {request.RequestNumber ?? request.Id.ToString()}";
+                var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/RejectedRequest.html");
+                var emailBody = File.ReadAllText(templatePath);
 
-                await SendToEmailsAsync(
-                    new[] { emailContext.RequestorEmail },
-                    subject,
-                    body,
-                    requestId,
-                    cancellationToken);
+                emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+                   .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+                   .Replace("{{rejection_reason}}", request.RejectionReason)
+                   .Replace("{{rejector}}", _currentUser.DisplayName)
+                   .Replace("{{req_type}}", request.RequestType);
+
+                await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
                 return;
             }
 
+            var lineManager = await GetRequestLineManager(request);
             if (role == DefaultRole.TrainingCentre)
             {
                 var subject = "Ellipse Access Request Rejected - Training Not Verified";
-                var comments = string.IsNullOrWhiteSpace(reason) ? "-" : reason;
+                var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/TrainingVerificationFailed.html");
+                var emailBody = File.ReadAllText(templatePath);
 
-                var requestorBody = EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(emailContext.RequestorName),
-                    "The following access request could not proceed because training requirements have not been verified.",
-                    $"Request Number: {emailContext.RequestNumber}",
-                    "Comments",
-                    comments,
-                    "This request has been closed.");
+                emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+                   .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+                   .Replace("{{rejection_reason}}", request.RejectionReason)
+                   .Replace("{{rejector}}", _currentUser.DisplayName)
+                   .Replace("{{req_type}}", request.RequestType);
 
-                await SendToEmailsAsync(
-                    new[] { emailContext.RequestorEmail },
-                    subject,
-                    requestorBody,
-                    requestId,
-                    cancellationToken);
+                await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
 
-                if (emailContext.ShouldNotifyLineManager)
-                {
-                    var managerBody = EmailMessageBuilder.Body(
-                        EmailMessageBuilder.Greeting(emailContext.LineManagerName),
-                        "The following access request could not proceed because training requirements have not been verified.",
-                        $"Request Number: {emailContext.RequestNumber}",
-                        "Comments",
-                        comments,
-                        "This request has been closed.");
-
-                    await SendToEmailsAsync(
-                        new[] { emailContext.LineManagerEmail },
-                        subject,
-                        managerBody,
-                        requestId,
-                        cancellationToken);
-                }
+                emailBody = emailBody.Replace(requestor.ToString(), lineManager.ToString());
+                await SendToEmailsAsync(new[] { lineManager?.Email }, subject, emailBody, request.Id, cancellationToken);
 
                 return;
             }
 
             if (role == DefaultRole.IctManager)
             {
-                var subject = $"Test/Development Access Request Rejected - {emailContext.RequestNumber}";
-                var comments = string.IsNullOrWhiteSpace(reason) ? "-" : reason;
+                var subject = $"Test/Development Access Request Rejected - {request.RequestNumber ?? request.Id.ToString()}";
+                var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/IctManagerRejection.html");
+                var emailBody = File.ReadAllText(templatePath);
 
-                var requestorBody = EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(emailContext.RequestorName),
-                    "The ICT Manager has rejected the following request:",
-                    $"Request Number: {emailContext.RequestNumber}",
-                    "Comments",
-                    comments,
-                    "This request has been closed.");
+                emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+                   .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+                   .Replace("{{rejection_reason}}", request.RejectionReason)
+                   .Replace("{{rejector}}", _currentUser.DisplayName)
+                   .Replace("{{req_type}}", request.RequestType);
 
-                await SendToEmailsAsync(
-                    new[] { emailContext.RequestorEmail },
-                    subject,
-                    requestorBody,
-                    requestId,
-                    cancellationToken);
+                await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
 
-                if (emailContext.ShouldNotifyLineManager)
-                {
-                    var managerBody = EmailMessageBuilder.Body(
-                        EmailMessageBuilder.Greeting(emailContext.LineManagerName),
-                        "The ICT Manager has rejected the following request:",
-                        $"Request Number: {emailContext.RequestNumber}",
-                        "Comments",
-                        comments,
-                        "This request has been closed.");
+                emailBody = emailBody.Replace(requestor.ToString(), lineManager.ToString());
+                await SendToEmailsAsync(new[] { lineManager?.Email }, subject, emailBody, request.Id, cancellationToken);
 
-                    await SendToEmailsAsync(
-                        new[] { emailContext.LineManagerEmail },
-                        subject,
-                        managerBody,
-                        requestId,
-                        cancellationToken);
-                }
                 return;
             }
 
             if (role == DefaultRole.HcSystemsOfficer)
             {
-                var subject = $"Ellipse Access Request Rejected - {emailContext.RequestNumber}";
-                var comments = string.IsNullOrWhiteSpace(reason) ? "-" : reason;
+                var subject = $"Ellipse Access Request Rejected - {request.RequestNumber}";
+                var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/HcOfficerRejectedRequest.html");
+                var emailBody = File.ReadAllText(templatePath);
 
-                async Task SendAsync(string? email, string name)
-                {
-                    var body = EmailMessageBuilder.Body(
-                        EmailMessageBuilder.Greeting(name),
-                        "The HC Systems Officer has rejected the request.",
-                        $"Request Number: {emailContext.RequestNumber}",
-                        "Comments",
-                        comments,
-                        "This request has been closed.",
-                        "If access is still required, a new request must be submitted.");
+                emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+                   .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+                   .Replace("{{rejection_reason}}", request.RejectionReason)
+                   .Replace("{{rejector}}", _currentUser.DisplayName)
+                   .Replace("{{req_type}}", request.RequestType);
 
-                    await SendToEmailsAsync(
-                        new[] { email },
-                        subject,
-                        body,
-                        requestId,
-                        cancellationToken);
-                }
+                await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
 
-                await SendAsync(emailContext.RequestorEmail, emailContext.RequestorName);
-                if (emailContext.ShouldNotifyLineManager)
-                    await SendAsync(emailContext.LineManagerEmail, emailContext.LineManagerName);
+                emailBody = emailBody.Replace(requestor.ToString(), lineManager.ToString());
+                await SendToEmailsAsync(new[] { lineManager?.Email }, subject, emailBody, request.Id, cancellationToken);
+
                 return;
             }
         }
 
-        public async Task NotifyImplementedAsync(
-            int requestId,
-            string? requestNumber,
-            string? requesterEmail,
-            CancellationToken cancellationToken = default)
+        public async Task NotifyImplementedAsync(Request request, CancellationToken cancellationToken = default)
         {
-            var emailContext = await LoadContextAsync(requestId, requestNumber, requesterEmail, cancellationToken);
-            var subject = $"Ellipse Access Successfully Implemented - {emailContext.RequestNumber}";
-            var implemented = emailContext.DateImplemented?.ToString("yyyy-MM-dd") ?? "-";
+            var requestor = GetRequestRequestor(request);
 
-            string BuildBody(string greetingName) => EmailMessageBuilder.Body(
-                EmailMessageBuilder.Greeting(greetingName),
-                "Your Ellipse Access Request has been successfully implemented.",
-                EmailMessageBuilder.DetailsSection(
-                    "Request Details",
-                    EmailMessageBuilder.Bullet("Request Number", emailContext.RequestNumber),
-                    EmailMessageBuilder.Bullet("Request Type", emailContext.RequestType),
-                    EmailMessageBuilder.Bullet("Environment", emailContext.Environment),
-                    EmailMessageBuilder.Bullet("Ellipse User ID", emailContext.EllipseUserId),
-                    EmailMessageBuilder.Bullet("Date Implemented", implemented)),
-                "The request has been completed and closed.");
+            var lineManager = await GetRequestLineManager(request);
+            var subject = $"Ellipse Access Successfully Implemented - {request.RequestNumber}";
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/AccessImplemented.html");
+            var emailBody = File.ReadAllText(templatePath);
 
-            await SendToEmailsAsync(
-                new[] { emailContext.RequestorEmail },
-                subject,
-                BuildBody(emailContext.RequestorName),
-                requestId,
-                cancellationToken);
+            emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{implemented_date}}", request.DateAccessGranted?.ToString("yyyy-MM-dd"))
+               .Replace("{{approver}}", _currentUser.DisplayName)
+               .Replace("{{ellepsi_id}}", request.EllipseUserId)
+               .Replace("{{environment}}", request.Environment)
+               .Replace("{{req_type}}", request.RequestType);
 
-            if (emailContext.ShouldNotifyLineManager)
-            {
-                await SendToEmailsAsync(
-                new[] { emailContext.LineManagerEmail },
-                subject,
-                BuildBody(emailContext.LineManagerName),
-                requestId,
-                cancellationToken);
-            }
+            await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
+
+            emailBody = emailBody.Replace(requestor.ToString(), lineManager.ToString());
+            await SendToEmailsAsync(new[] { lineManager?.Email }, subject, emailBody, request.Id, cancellationToken);
         }
 
-        public async Task NotifyReturnForAmendmentAsync(
-            int requestId,
-            string? requestNumber,
-            string employeeEmail,
-            string reason,
-            CancellationToken cancellationToken = default)
+        public async Task NotifyReturnForAmendmentAsync(Request request, string reason, CancellationToken cancellationToken = default)
         {
-
-            var emailContext = await LoadContextAsync(requestId, requestNumber, employeeEmail, cancellationToken);
-            var subject = $"Additional Information Required - {emailContext.RequestNumber}";
-            var comments = string.IsNullOrWhiteSpace(reason) ? "-" : reason;
+            var subject = $"Additional Information Required - {request.RequestNumber}";
 
             var documentsRequested = await _db.DocumentResubmissionRequests.AsNoTracking()
-                .Where(d => d.RequestId == requestId)
+                .Where(d => d.RequestId == request.Id)
                 .OrderByDescending(d => d.RequestedAt)
                 .Select(d => d.DocumentsRequested)
                 .FirstOrDefaultAsync(cancellationToken);
 
             var documentLines = (documentsRequested ?? "")
             .Split(new[] { ',', ';', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(item => "\u2022 " + item)
-            .DefaultIfEmpty("\u2022 " + comments)
+            .Select(item => "\u2022 " + item + "<br/>")
             .ToArray();
 
-            string BuildBody(string greetingName) => EmailMessageBuilder.Body(
-                EmailMessageBuilder.Greeting(greetingName),
-                "The HC Systems Officer has reviewed the request and requires additional information and/or supporting documentation before processing can continue.",
-                EmailMessageBuilder.DetailsSection(
-                    "Request Details",
-                    EmailMessageBuilder.Bullet("Request Number", emailContext.RequestNumber),
-                    EmailMessageBuilder.Bullet("Current Status", "Awaiting Re-submission")),
-                    "Reason",
-                    comments,
-                    "Documents/Information Required.",
-                    string.Join("\r\n", documentLines),
-                    "Please log into the system and resubmit the required information.");
+            var requestor = GetRequestRequestor(request);
+            var lineManager = await GetRequestLineManager(request);
+            var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/RequestAdditionalInformation.html");
+            var emailBody = File.ReadAllText(templatePath);
 
-            await SendToEmailsAsync(
-                new[] { emailContext.RequestorEmail },
-                subject,
-                BuildBody(emailContext.RequestorName),
-                requestId,
-                cancellationToken);
+            emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{implemented_date}}", request.DateAccessGranted?.ToString("yyyy-MM-dd"))
+               .Replace("{{approver}}", _currentUser.DisplayName)
+               .Replace("{{rejection_reason}}", reason)
+               .Replace("{{missing_documents}}", string.Join(" ", documentLines));
 
-            if (emailContext.ShouldNotifyLineManager)
-                await SendToEmailsAsync(
-                    new[] { emailContext.LineManagerEmail },
-                    subject,
-                    BuildBody(emailContext.LineManagerName),
-                    requestId,
-                    cancellationToken);
+            await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
 
+            emailBody = emailBody.Replace(requestor.ToString(), lineManager.ToString());
+            await SendToEmailsAsync(new[] { lineManager?.Email }, subject, emailBody, request.Id, cancellationToken);
         }
 
-        public async Task NotifyCancelledAsync(
-            int requestId,
-            string? requestNumber,
-            string? requesterEmail,
-            CancellationToken cancellationToken = default)
+        public async Task NotifyExpiryRemindersAsync(Request request, CancellationToken cancellationToken = default)
         {
-            var emailContext = await LoadContextAsync(requestId, requestNumber, requesterEmail, cancellationToken);
-            var recipients = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { emailContext.RequestorEmail };
-            if (emailContext.ShouldNotifyLineManager)
-                recipients.Add(emailContext.LineManagerEmail!);
-
-            var subject = $"Ellipse request {emailContext.RequestNumber} cancelled";
-            var body = EmailMessageBuilder.Body(
-                $"Ellipse access request {emailContext.RequestNumber} has been cancelled." +
-                "No further workflow action is required.");
-
-            await SendToEmailsAsync(recipients, subject, body, requestId, cancellationToken);
-
-        }
-
-        public async Task NotifyExpiryRemindersAsync(
-            int requestId,
-            string? requestNumber,
-            string? employeeEmail,
-            DateTime endDate,
-            int daysRemaining,
-            CancellationToken cancellationToken = default)
-        {
-
-            var emailContext = await LoadContextAsync(requestId, requestNumber, employeeEmail, cancellationToken);
-            var expiry = endDate.ToString("yyyy-MM-dd");
-
-            Func<string, string> BuildBody;
+            var daysRemaining = (request.EndDate!.Value.Date - DateTime.UtcNow.Date).Days;
+            var requestor = GetRequestRequestor(request);
+            var lineManager = await GetRequestLineManager(request);
             string subject;
+            string emailBody;
 
             if (daysRemaining == 30)
             {
-                subject = $"Access Expiry Notification - {emailContext.RequestNumber}";
-                BuildBody = name => EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(name),
-                    "This is to advise that the following Ellipse access is due to expire.",
-                    EmailMessageBuilder.DetailsSection(
-                        "Details",
-                        EmailMessageBuilder.Bullet("Request Number", emailContext.RequestNumber),
-                        EmailMessageBuilder.Bullet("Environment", emailContext.Environment),
-                        EmailMessageBuilder.Bullet("Access End Date", expiry)),
-                    "Please take the necessary action if continued access is required.");
+                subject = $"Access Expiry Notification - {request.RequestNumber}";
+                var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/AccessExpiryNotification.html");
+                emailBody = File.ReadAllText(templatePath);
 
+                emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{environment}}", request.Environment)
+               .Replace("{{end_date}}", request.EndDate?.ToLocalTime().ToString("yyyy-MM-dd"));
             }
             else if (daysRemaining == 7)
             {
-                subject = $"Urgent: Access Expiry in 7 Days - {emailContext.RequestNumber}";
-                BuildBody = name => EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(name),
-                    "The following Ellipse access will expire within the next 7 days.",
-                    EmailMessageBuilder.Bullet("Request Number", emailContext.RequestNumber),
-                    EmailMessageBuilder.Bullet("Access Expiry Date", expiry),
-                    "If continued access is required, please submit a new request before the expiry date.");
+                subject = $"Access Expiry Notification - {request.RequestNumber}";
+                var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/AccessExpiryNotification7Days.html");
+                emailBody = File.ReadAllText(templatePath);
+
+                emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{environment}}", request.Environment)
+               .Replace("{{end_date}}", request.EndDate?.ToLocalTime().ToString("yyyy-MM-dd"));
             }
             else if (daysRemaining <= 0)
             {
-                subject = $"Ellipse Access Expired - {emailContext.RequestNumber}";
-                BuildBody = name => EmailMessageBuilder.Body(
-                    EmailMessageBuilder.Greeting(name),
-                    "The following Ellipse access has now expired:",
-                    EmailMessageBuilder.Bullet("Request Number", emailContext.RequestNumber),
-                    EmailMessageBuilder.Bullet("Expiry Date", expiry),
-                    "Access has been removed or is scheduled for removal in accordance with the approved access period.");
+                subject = $"Access Expiry Notification - {request.RequestNumber}";
+                var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Email Templates/AccessExpiredNotification.html");
+                emailBody = File.ReadAllText(templatePath);
+
+                emailBody = emailBody.Replace("{{name}}", requestor.ToString())
+               .Replace("{{req_number}}", request.RequestNumber ?? request.Id.ToString())
+               .Replace("{{environment}}", request.Environment)
+               .Replace("{{end_date}}", request.EndDate?.ToLocalTime().ToString("yyyy-MM-dd"));
             }
             else
             {
                 return; // job should not call for other day counts
             }
-            await SendToEmailsAsync(
-                new[] { emailContext.RequestorEmail },
-                subject,
-                BuildBody(emailContext.RequestorName),
-                requestId,
-                cancellationToken);
-            if (emailContext.ShouldNotifyLineManager)
-                await SendToEmailsAsync(
-                    new[] { emailContext.LineManagerEmail },
-                    subject,
-                    BuildBody(emailContext.LineManagerName),
-                    requestId,
-                    cancellationToken);
-        }
 
-        private static (string? roleCode, string? label) MapNextApprover(string toStatus)
-        {
-            return toStatus switch
-            {
-                "PendingApproval" => (RoleCodes.LineManager, "Line Manager"),
-                "TrainingVerificationPending" => (RoleCodes.TrainingCentre, "Training Centre"),
-                "ICTManagerApprovalPending" => (RoleCodes.IctManager, "ICT Manager"),
-                "HcActionPending" => (RoleCodes.HcSystemsOfficer, "HC Systems Officer"),
-                _ => (null, null)
-            };
-        }
+            await SendToEmailsAsync(new[] { requestor.GetEmailAddress() }, subject, emailBody, request.Id, cancellationToken);
 
-        private async Task<Request?> LoadRequestAsync(int requestId, CancellationToken cancellationToken)
-        {
-            return await _db.Requests.AsNoTracking()
-            .Include(r => r.Employee)
-            .Include(r => r.Contractor)
-            .FirstOrDefaultAsync(r => r.Id == requestId, cancellationToken);
-        }
+            emailBody = emailBody.Replace("{{name}}", lineManager.ToString());
 
-        private async Task<RequestEmailContext> LoadContextAsync(
-            int requestId,
-            string? requestNumber,
-            string? fallbackEmail,
-            CancellationToken cancellationToken)
-        {
-            var request = await LoadRequestAsync(requestId, cancellationToken);
-            var isEmployee = string.Equals(request?.UserType, UserType.Employee.GetDescription(), StringComparison.OrdinalIgnoreCase);
-
-            var requestorEmail = new[]
-            {
-                request?.EmployeeEmail,
-                request?.Employee?.EmailAddress,
-                request?.Contractor?.EmailAddress,
-                fallbackEmail
-
-            }.FirstOrDefault(e => !string.IsNullOrWhiteSpace(e))?.Trim();
-
-            var requestorName = isEmployee
-                ? EmailMessageBuilder.PersonName(request?.Employee?.FirstName, request?.Employee?.Surname)
-                : EmailMessageBuilder.PersonName(request?.Contractor?.FirstName, request?.Contractor?.Surname);
-
-            USTEmployeeDetails? lineManager = null;
-            if (isEmployee && !string.IsNullOrWhiteSpace(requestorEmail))
-                lineManager = await TryGetLineManagerAsync(requestorEmail, requestId);
-
-            return new RequestEmailContext
-            {
-                RequestId = requestId,
-                RequestNumber = requestNumber ?? $"#{requestId}",
-                RequestorName = requestorName,
-                RequestorEmail = requestorEmail,
-                RequestType = EmailMessageBuilder.Value(request?.RequestType),
-                Environment = EmailMessageBuilder.Value(request?.Environment),
-                SubmittedAt = request?.RequestedDate ?? DateTime.UtcNow,
-                IsEmployeeRequest = isEmployee,
-                LineManager = lineManager,
-                EllipseUserId = request?.EllipseUserId,
-                DateImplemented = request?.DateAccessGranted
-            };
-        }
-
-        private async Task<USTEmployeeDetails?> TryGetLineManagerAsync(string employeeEmail, int requestId)
-        {
-            try
-            {
-                var manager = await _lookupUSTEmployeeDetails
-                    .GetEmployeeManagerDetailsByEmployeeEmail(employeeEmail);
-                return string.IsNullOrWhiteSpace(manager.Email) ? null : manager;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not resolve Line Manager for request {RequestId}.", requestId);
-                return null;
-            }
+            await SendToEmailsAsync(new[] { lineManager.Email }, subject, emailBody, request.Id, cancellationToken);
         }
 
         private async Task SendToEmailsAsync(
@@ -612,7 +522,7 @@ namespace EUAMS.Core.Notifications
                         BccList = null,
                         Subject = subject,
                         Body = body,
-                        IsHtml = false,
+                        IsHtml = true,
                         FailureCount = 0,
                         ReferenceId = requestRef ?? requestId.ToString(),
                         HasAttachments = false
@@ -630,38 +540,6 @@ namespace EUAMS.Core.Notifications
                         requestId);
                 }
             }
-        }
-
-        private sealed class RequestEmailContext
-        {
-            public required int RequestId { get; init; }
-            public required string RequestNumber { get; init; }
-            public required string RequestorName { get; init; }
-            public string? RequestorEmail { get; init; }
-            public required string RequestType { get; init; }
-            public required string Environment { get; init; }
-            public required DateTime SubmittedAt { get; init; }
-            public string? EllipseUserId { get; init; }
-            public DateTime? DateImplemented { get; init; }
-            public required bool IsEmployeeRequest { get; init; }
-            public USTEmployeeDetails? LineManager { get; init; }
-
-            public string LineManagerName =>
-                EmailMessageBuilder.PersonName(
-                    LineManager?.PrefName ?? LineManager?.FirstName,
-                    LineManager?.Surname);
-
-            public string? LineManagerEmail =>
-                string.IsNullOrWhiteSpace(LineManager?.Email) ? null : LineManager.Email.Trim();
-
-            public bool LineManagerIsRequestee =>
-                IsEmployeeRequest
-                && !string.IsNullOrWhiteSpace(RequestorEmail)
-                && !string.IsNullOrWhiteSpace(LineManagerEmail)
-                && string.Equals(RequestorEmail, LineManagerEmail, StringComparison.OrdinalIgnoreCase);
-
-            public bool ShouldNotifyLineManager =>
-                IsEmployeeRequest && !string.IsNullOrWhiteSpace(LineManagerEmail);
         }
     }
 }

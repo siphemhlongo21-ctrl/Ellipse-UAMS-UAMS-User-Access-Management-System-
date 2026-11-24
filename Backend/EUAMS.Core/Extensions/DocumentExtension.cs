@@ -22,9 +22,7 @@ namespace EUAMS.Core.Extensions
                 RequestId = document.RequestId,
                 Active = document.IsActive,
                 Archived = document.Archived,
-                ArchivedDate = document.ArchivedDate,
-                //new addded line below
-                RetentionExpiryDate = document.RetentionExpiryDate
+                ArchivedDate = document.ArchivedDate
             };
         }
 
@@ -45,9 +43,7 @@ namespace EUAMS.Core.Extensions
                 RequestId = documentDetails.RequestId,
                 IsActive = documentDetails.Active,
                 Archived = documentDetails.Archived,
-                ArchivedDate = documentDetails.ArchivedDate,
-                //new addded line below
-                RetentionExpiryDate = documentDetails.RetentionExpiryDate
+                ArchivedDate = documentDetails.ArchivedDate
             };
         }
 

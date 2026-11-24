@@ -2,12 +2,14 @@
 using EUAMS.Shared.DTOs.Employee;
 using EUAMS.Shared.Interfaces;
 using EUAMS.Shared.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EUAMS.API.Controllers
 {
     [Route("api/[controller]/[action]")]
     [ApiController]
+    [Authorize]
     public class LookupUSTEmployeeController : ControllerBase
     {
         public readonly ILookupUSTEmployeeServices _lookupUSTEmployeeDetails;

@@ -1,6 +1,7 @@
 ﻿using EUAMS.Data.Entities;
 using EUAMS.Shared.DTOs.Request;
 using EUAMS.Shared.Enums;
+using EUAMS.Shared.Interfaces;
 
 namespace EUAMS.Core.Extensions
 {
@@ -25,7 +26,7 @@ namespace EUAMS.Core.Extensions
                 BusinessJustification = request.BusinessJustification,
                 AdditionalUserAccess = request.AdditionalUserAccess,
                 UserType = request.UserType,
-                EmployeeEmail = request.EmployeeEmail ?? request.Contractor?.EmailAddress, 
+                EmployeeEmail = request.EmployeeEmail ?? request.Contractor?.EmailAddress,
                 Department = request.Employee?.Department ?? request.Contractor?.Department,
                 Branch = request.Employee?.Branch ?? request.Contractor?.Branch,
                 ServiceNumber = request.Employee?.ServiceNumber,
@@ -39,7 +40,7 @@ namespace EUAMS.Core.Extensions
                     : $"{request.Contractor.FirstName} {request.Contractor.Surname}".Trim(),
                 CompanyName = request.Contractor?.CompanyName,
                 ContractId = request.ContractId,
-                Contractor = request.Contractor?.ToDetails(),  
+                Contractor = request.Contractor?.ToDetails(),
                 EllipseUserId = request.EllipseUserId,
                 TemporaryPosition = request.TemporaryPosition,
                 TemporaryPostId = request.TemporaryPostId,
@@ -57,7 +58,8 @@ namespace EUAMS.Core.Extensions
                 EllipseUserUpdateDate = request.EllipseUserUpdateDate,
                 ClosureOutcome = request.ClosureOutcome,
                 ImplementationComments = request.ImplementationComments,
-                SubmittedByServiceNumber = request.SubmittedByServiceNumber
+                SubmittedByServiceNumber = request.SubmittedByServiceNumber,
+                DocumentResubmissionRequests = request.DocumentResubmissionRequests?.Select(o => o.DocumentsRequested).ToList()
             };
         }
 
@@ -66,16 +68,46 @@ namespace EUAMS.Core.Extensions
             return requests.Select(request => request.ToDetails()).ToList();
         }
 
-        public static RequestStatus ParseStatus(string? status)
+        public static Request ConvertToNewRequest(this NewRequestDetails details, string requestType, ICurrentUserService currentUser)
         {
-            if (string.IsNullOrWhiteSpace(status))
+            var request = new Request
             {
-                return RequestStatus.Draft;
+                Status = RequestStatus.PendingApproval.GetDescription(),
+                StartDate = details.StartDate,
+                EndDate = details.EndDate,
+                RequestedDate = DateTime.UtcNow,
+                RequestType = requestType,
+                Environment = details.Environment,
+                UserAccessType = details.UserAccessType,
+                EllipsePosition = details.EllipsePosition.Trim(),
+                PositionToCopy = details.PositionToCopy,
+                MenuAccess = details.MenuAccess.Trim(),
+                BusinessJustification = details.BusinessJustification.Trim(),
+                AdditionalUserAccess = details.AdditionalUserAccess.Trim(),
+                TemporaryPosition = details.TemporaryPosition,
+                TemporaryPostId = details.TemporaryPostId,
+                PermanentPostId = details.Employee?.PostId,
+                EllipseUserId = details.EllipseUserId,
+                SubmittedByServiceNumber = currentUser.ServiceNumber,
+                UserType = details.UserType
+            };
+
+            if(requestType.ToLower().Contains("terminate"))
+            {
+                request.Status = RequestStatus.HcActionPending.GetDescription();
+            }
+            else if ((request.UserType == UserType.Contractor.GetDescription() || details.Employee?.ServiceNumber != currentUser.ServiceNumber)
+                && request.Environment == Environments.Production.GetDescription())
+            {
+                request.Status = RequestStatus.TrainingVerificationPending.GetDescription();
+            }
+            else if ((request.UserType == UserType.Contractor.GetDescription() || details.Employee?.ServiceNumber != currentUser.ServiceNumber)
+                && request.Environment != Environments.Production.GetDescription())
+            {
+                request.Status = RequestStatus.ICTManagerApprovalPending.GetDescription();
             }
 
-            return Enum.TryParse<RequestStatus>(status, ignoreCase: true, out var parsed)
-                ? parsed
-                : RequestStatus.Draft;
+            return request;
         }
     }
 }

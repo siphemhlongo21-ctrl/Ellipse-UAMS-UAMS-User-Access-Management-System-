@@ -7,8 +7,10 @@ import {
   updatePermission,
 } from "../api/permissionApi";
 
+const PERMISSIONS_PER_PAGE = 10;
 export default function Permissions() {
   const [permissions, setPermissions] = useState<PermissionDetails[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
@@ -27,7 +29,13 @@ export default function Permissions() {
 
   // Custom Deactivation Modal State
   const [deactivatingPermission, setDeactivatingPermission] = useState<PermissionDetails | null>(null);
-
+  const totalPages = Math.ceil(permissions.length / PERMISSIONS_PER_PAGE);
+  const displayedPage = Math.min(currentPage, Math.max(totalPages, 1));
+  const firstPermissionIndex = (displayedPage - 1) * PERMISSIONS_PER_PAGE;
+  const paginatedPermissions = permissions.slice(
+  firstPermissionIndex,
+  firstPermissionIndex + PERMISSIONS_PER_PAGE
+);
   const notifySuccess = (msg: string) => {
     setSuccessMessage(msg);
     setTimeout(() => {
@@ -51,6 +59,9 @@ export default function Permissions() {
       });
 
       setPermissions(sortedData);
+      setCurrentPage((page) =>
+      Math.min(page, Math.max(1, Math.ceil(sortedData.length / PERMISSIONS_PER_PAGE)))
+     );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load permissions");
     } finally {
@@ -192,7 +203,7 @@ export default function Permissions() {
                 </td>
               </tr>
             ) : (
-              permissions.map((p) => (
+              paginatedPermissions.map((p) => (
                 <tr key={p.id} className="transition-colors hover:bg-[#f8faff]">
                   <td className="whitespace-nowrap px-6 py-4 font-semibold text-[#13264d]">
                     {p.name}
@@ -241,7 +252,53 @@ export default function Permissions() {
             )}
           </tbody>
         </table>
+              {!loading && !error && permissions.length > 0 && (
+        <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
+          <p className="text-sm text-[#637596]">
+            Showing {firstPermissionIndex + 1} to{" "}
+            {Math.min(firstPermissionIndex + PERMISSIONS_PER_PAGE, permissions.length)} of{" "}
+            {permissions.length} entries
+          </p>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCurrentPage(Math.max(displayedPage - 1, 1))}
+              disabled={displayedPage === 1}
+              className="rounded border border-[#dce2ee] bg-white px-3 py-1.5 text-sm text-[#24416f] hover:bg-[#eef2f8] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Previous
+            </button>
+
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+              <button
+                key={page}
+                type="button"
+                aria-current={displayedPage === page ? "page" : undefined}
+                onClick={() => setCurrentPage(page)}
+                className={`rounded border px-3 py-1.5 text-sm ${
+                  displayedPage === page
+                    ? "border-[#12356b] bg-[#12356b] font-semibold text-white"
+                    : "border-[#dce2ee] bg-white text-[#24416f] hover:bg-[#eef2f8]"
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => setCurrentPage(Math.min(displayedPage + 1, totalPages))}
+              disabled={displayedPage === totalPages}
+              className="rounded border border-[#dce2ee] bg-white px-3 py-1.5 text-sm text-[#24416f] hover:bg-[#eef2f8] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
       </div>
+
 
       {/* CRUD Modal */}
       {isModalOpen && (

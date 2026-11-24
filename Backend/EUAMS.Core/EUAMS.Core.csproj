@@ -7,7 +7,87 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
+    <None Remove="Email Templates\AccessExpiredNotification.html" />
+    <None Remove="Email Templates\AccessExpiryNotification.html" />
+    <None Remove="Email Templates\AccessExpiryNotification7Days.html" />
+    <None Remove="Email Templates\AccessImplemented.html" />
+    <None Remove="Email Templates\ApprovedRequest.html" />
+    <None Remove="Email Templates\EmployeeNewRequest.html" />
+    <None Remove="Email Templates\IctManagerApproved.html" />
+    <None Remove="Email Templates\IctManagerPending.html" />
+    <None Remove="Email Templates\IctManagerRejection.html" />
+    <None Remove="Email Templates\InformationResubmitted.html" />
+    <None Remove="Email Templates\LineManagerNewRequest.html" />
+    <None Remove="Email Templates\LineManagerPending.html" />
+    <None Remove="Email Templates\RejectedRequest.html" />
+    <None Remove="Email Templates\RequestAdditionalInformation.html" />
+    <None Remove="Email Templates\TrainingVerificationFailed.html" />
+    <None Remove="Email Templates\TrainingVerificationPending.html" />
+    <None Remove="Email Templates\TrainingVerified.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Email Templates\AccessExpiredNotification.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\AccessExpiryNotification.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\AccessExpiryNotification7Days.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\AccessImplemented.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\ApprovedRequest.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\EmployeeNewRequest.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\HcOfficerPendingRequest.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\IctManagerApproved.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\IctManagerPending.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\IctManagerRejection.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\InformationResubmitted.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\LineManagerNewRequest.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\LineManagerPending.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\HcOfficerRejectedRequest.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\RejectedRequest.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\RequestAdditionalInformation.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\TrainingVerificationFailed.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\TrainingVerificationPending.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Email Templates\TrainingVerified.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.13" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
       <PrivateAssets>all</PrivateAssets>
@@ -22,6 +102,7 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
     <PackageReference Include="Minio" Version="7.0.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="9.0.21" />
   </ItemGroup>
 
   <ItemGroup>

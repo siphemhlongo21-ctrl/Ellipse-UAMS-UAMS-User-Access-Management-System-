@@ -159,7 +159,7 @@ namespace EUAMS.Core.Reports
             CancellationToken cancellationToken = default)
         {
             var now = DateTime.UtcNow;
-            var query = BaseRequestQuery().Where(r => r.Status == RequestStatus.Implemented.GetDescription());
+            var query = BaseRequestQuery();
 
             if (!string.IsNullOrWhiteSpace(environment))
             {
@@ -194,8 +194,7 @@ namespace EUAMS.Core.Reports
 
             if (!string.IsNullOrWhiteSpace(companyName))
             {
-                var company = companyName.Trim();
-                query = query.Where(r => r.Contractor!.CompanyName.Contains(company));
+                query = query.Where(r => r.Contractor!.CompanyName.ToLower().Contains(companyName.ToLower()));
             }
 
             if (contractEndFrom is not null)
@@ -244,7 +243,7 @@ namespace EUAMS.Core.Reports
 
         private IQueryable<Request> BaseRequestQuery() =>
             _db.Requests.AsNoTracking()
-                .Include(r => r.Employee);
+                .Include(r => r.Employee).Include(r => r.Contractor);
 
         private static AccessRequestReportRow MapAccessRow(Request r) => new()
         {

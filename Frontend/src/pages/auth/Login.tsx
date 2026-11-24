@@ -158,7 +158,7 @@ export default function Login() {
                                             type="email"
                                             value={username}
                                             onChange={e => { setUsername(e.target.value); setError(""); }}
-                                            placeholder="e.g. admin.demo@ethekwini.gov.za"
+                                            placeholder="e.g. admin.demo@example.com"
                                             className={`${inputCls} pl-10 pr-4 py-3.5`}
                                             autoComplete="email"
                                             disabled={busy}

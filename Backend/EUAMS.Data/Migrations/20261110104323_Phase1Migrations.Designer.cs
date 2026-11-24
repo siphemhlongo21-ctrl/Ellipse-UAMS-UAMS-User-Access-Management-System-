@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EUAMS.Data.Migrations
 {
     [DbContext(typeof(EuamsDbContext))]
-    [Migration("20260915075008_databaseTables")]
-    partial class databaseTables
+    [Migration("20261110104323_Phase1Migrations")]
+    partial class Phase1Migrations
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1000,6 +1000,27 @@ namespace EUAMS.Data.Migrations
                             Code = "OTHER",
                             IsActive = true,
                             Name = "Other"
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Code = "TERMINATE",
+                            IsActive = true,
+                            Name = "Terminate"
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Code = "DELETE_SIGNON",
+                            IsActive = true,
+                            Name = "Delete Sign On"
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Code = "UNLOCK_SIGNON",
+                            IsActive = true,
+                            Name = "Unlocking of Sign On's"
                         });
                 });
 

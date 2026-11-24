@@ -32,5 +32,7 @@ namespace EUAMS.Shared.Enums
         Cancelled = 12,
         [Description("Resubmitted Amendment")]
         ResubmittedAmendment = 13,
+        [Description("Line Manager Created A Request")]
+        LineManagerCreatedRequest = 14,
     }
 }

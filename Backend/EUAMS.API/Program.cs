@@ -23,7 +23,7 @@ namespace EUAMS.API
             {
                 options.SwaggerDoc("v1", new OpenApiInfo
                 {
-                    Title = "Ellipse API",
+                    Title = "EUAMS API",
                     Version = "v1",
                     Description = isDev
                         ? "Ellipse User Access Management API. Development: AdUsername and/or Entra Bearer when AzureAd is configured."
@@ -101,8 +101,8 @@ namespace EUAMS.API
                 app.UseSwagger();
                 app.UseSwaggerUI(options =>
                 {
-                    options.SwaggerEndpoint("/swagger/v1/swagger.json", "Ellipse API v1");
-                    options.DocumentTitle = "Ellipse API — Swagger";
+                    options.SwaggerEndpoint("/swagger/v1/swagger.json", "EUAMS API v1");
+                    options.DocumentTitle = "EUAMS API — Swagger";
                     options.DisplayRequestDuration();
                 });
             }

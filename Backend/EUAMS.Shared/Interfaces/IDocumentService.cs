@@ -1,5 +1,4 @@
 using EUAMS.Shared.DTOs.Document;
-using EUAMS.Shared.DTOs.DocumentAudit;
 
 namespace EUAMS.Shared.Interfaces
 {
@@ -21,17 +20,12 @@ namespace EUAMS.Shared.Interfaces
 
         Task<List<DocumentDetails>> GetRequestDocuments(int requestId);
 
-        // --- NEW ADDITIONS START HERE ---
-        Task<List<DocumentDetails>> GetArchivedRequestDocuments(int requestId);
-        Task<bool> RestoreDocument(int documentId);
-        Task<List<DocumentAuditDetails>> GetDocumentAuditTrail(int documentId);
-        // --- NEW ADDITIONS END HERE ---
-
         Task<DocumentDetails> UpdateDocument(DocumentDetails documentDetails);
 
         Task<bool> DeleteDocument(int documentId);
 
         Task<bool> ArchiveDocument(int documentId);
+        Task<int> ArchiveAllExpiredDocumentsAsync(CancellationToken cancellationToken = default);
 
         Task<DocumentDownloadResult> DownloadDocument(int documentId);
     }

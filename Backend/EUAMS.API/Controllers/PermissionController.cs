@@ -1,12 +1,13 @@
 ﻿using EUAMS.Shared.DTOs.Permission;
 using EUAMS.Shared.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EUAMS.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]/[action]")]
-
+    [Authorize]
     public class PermissionController : ControllerBase
     {
         private readonly IPermissionService _permissionService;

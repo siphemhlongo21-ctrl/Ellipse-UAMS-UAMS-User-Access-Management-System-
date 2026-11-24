@@ -2,6 +2,7 @@ using EUAMS.API.Security;
 using EUAMS.Shared.DTOs.Request;
 using EUAMS.Shared.Interfaces;
 using EUAMS.Shared.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,6 +10,7 @@ namespace EUAMS.API.Controllers
 {
     [Route("api/[controller]/[action]")]
     [ApiController]
+    [Authorize]
     public class RequestsController : ControllerBase
     {
         private readonly IRequestServices _requestServices;
@@ -372,16 +374,6 @@ namespace EUAMS.API.Controllers
                 () => _requestServices.ResubmitAmendment(requestId),
                 requestId,
                 "Resubmit amendment");
-        }
-
-        [HttpPost]
-        [AuthorizePermission(PermissionCodes.RequestCancel)]
-        public async Task<ActionResult<bool>> Cancel(int requestId)
-        {
-            return await ExecuteWorkflowAsync(
-                () => _requestServices.CancelRequest(requestId),
-                requestId,
-                "Cancel");
         }
 
         private async Task<ActionResult<bool>> ExecuteWorkflowAsync(

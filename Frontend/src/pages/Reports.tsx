@@ -173,7 +173,7 @@ export function Reports() {
         return acc;
     }, {});
 
-    const envSummary = (["PROD", "TEST", "DEV"] as const).map(env => {
+    const envSummary = (["PRODUCTION", "TEST", "DEVELOPMENT"] as const).map(env => {
         const rows = envRows.filter(r => (r.environment || "").toUpperCase() === env);
         const active = rows.filter(r => {
             const s = (r.status || "").toLowerCase();
@@ -474,7 +474,7 @@ export function Reports() {
                         {envRows.length === 0 && !loading ? (
                             <p className="text-xs text-foreground/40 text-center py-6">No environment access records match the filters.</p>
                         ) : (
-                            envSummary.map(({ env, total, pending, active }) => (
+                            envSummary.filter(x => applied.environment === "" ? x!== undefined : x.env.toUpperCase() === applied.environment).map(({ env, total, pending, active }) => (
                                 <div key={env}>
                                     <div className="flex items-center justify-between mb-2">
                                         <EnvBadge env={env} />
@@ -511,14 +511,14 @@ export function Reports() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/50">
-                                {contractorRows.length === 0 ? (
+                                {contractorRows.filter(x => applied.environment === "" ? x!== undefined : x.environment?.toUpperCase() === applied.environment).length === 0 ? (
                                     <tr>
                                         <td colSpan={6} className="py-4 text-center text-foreground/40">
                                             {loading ? "Loading…" : "No contractor records match the filters."}
                                         </td>
                                     </tr>
                                 ) : (
-                                    contractorRows.map(r => {
+                                    contractorRows.filter(x => applied.environment === "" ? x!== undefined : x.environment?.toUpperCase() === applied.environment).map(r => {
                                         const accessState = r.accessState || "—";
                                         const statusStyle =
                                             accessState === "Active"

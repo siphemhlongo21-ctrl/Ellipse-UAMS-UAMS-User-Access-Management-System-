@@ -58,7 +58,7 @@ function messageFromPayload(payload: unknown, status: number, path: string): str
 }
 
 export interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   query?: Record<string, string | number | boolean | null | undefined>;
   body?: unknown;
   signal?: AbortSignal;

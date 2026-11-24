@@ -4,11 +4,11 @@ namespace EUAMS.Shared.Interfaces
 {
     public interface IPermissionService
     {
-        Task<IReadOnlyCollection<string>> GetPermissionsForUserAsync(string serviceNumber, CancellationToken cancellationToken = default);
+        Task<List<string>> GetPermissionsForUserAsync(string serviceNumber, CancellationToken cancellationToken = default);
 
-        Task<IReadOnlyCollection<string>> GetRolesForUserAsync(string serviceNumber, CancellationToken cancellationToken = default);
+        Task<List<string>> GetRolesForUserAsync(string serviceNumber, CancellationToken cancellationToken = default);
 
-        Task<IReadOnlyCollection<PermissionDetails>> GetPermissionsAsync(string? permissionName = null, CancellationToken cancellationToken = default);
+        Task<List<PermissionDetails>> GetPermissionsAsync(string? permissionName = null, CancellationToken cancellationToken = default);
 
         Task<PermissionDetails?> GetPermissionAsync(int permissionId, CancellationToken cancellationToken = default);
 
@@ -18,7 +18,7 @@ namespace EUAMS.Shared.Interfaces
 
         Task<bool> DeletePermissionAsync(int permissionId, CancellationToken cancellationToken = default);
 
-        Task<IReadOnlyCollection<string>> GetPermissionsForRole(string Role, CancellationToken cancellationToken = default);
+        Task<List<string>> GetPermissionsForRole(string Role, CancellationToken cancellationToken = default);
     }
 }
 

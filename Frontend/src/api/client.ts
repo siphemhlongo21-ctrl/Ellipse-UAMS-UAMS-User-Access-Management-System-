@@ -9,7 +9,7 @@ let email: string | null = import.meta.env.DEV
   : null;
 let bearerToken: string | null = null;
 
-type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
 interface RequestOptions {
   params?: Record<string, string | number | boolean | undefined>;
@@ -79,6 +79,7 @@ export const http = {
   post: <T>(path: string, options?: RequestOptions) => request<T>("POST", path, options),
   put: <T>(path: string, options?: RequestOptions) => request<T>("PUT", path, options),
   delete: <T>(path: string, options?: RequestOptions) => request<T>("DELETE", path, options),
+  patch: <T>(path: string, options?: RequestOptions) => request<T>("PATCH", path, options),
 };
 
 export async function uploadFile(
@@ -87,7 +88,12 @@ export async function uploadFile(
 ): Promise<Response> {
   const headers: Record<string, string> = {};
   const token = bearerToken ?? sessionStorage.getItem("access_token");
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  } else {
+    const username = email ?? sessionStorage.getItem("email");
+    if (username) headers[AD_HEADER] = username;
+  }
 
   const res = await fetch(buildUrl(path), {
     method: "POST",
@@ -199,7 +205,6 @@ function resolveUrl(path: string): string {
 
 export interface ApiRequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
-  /** When true, do not JSON-stringify body (FormData / Blob). */
   rawBody?: boolean;
 }
 

@@ -70,21 +70,20 @@ export interface DocumentAuditDetails {
 }
 
 export interface DocumentDetails {
-    id: number;
-    data?: string | null;
-    storageKey?: string | null;
-    fileName?: string | null;
-    contentType?: string | null;
-    contentLength?: number | null;
-    dateUploaded: string;
-    dateModified?: string | null;
-    documentType?: string | null;
-    documentCategory?: string | null;
-    requestId: number;
-    active: boolean;
-    archived: boolean;
-    archivedDate?: string | null;
-    retentionExpiryDate?: string | null;
+  id: number;
+  data?: string | null;
+  storageKey?: string | null;
+  fileName?: string | null;
+  contentType?: string | null;
+  contentLength?: number | null;
+  dateUploaded: string;
+  dateModified?: string | null;
+  documentType?: string | null;
+  documentCategory?: string | null;
+  requestId: number;
+  active: boolean;
+  archived: boolean;
+  archivedDate?: string | null;
 }
 
 export interface EmployeeDetails {
@@ -248,8 +247,8 @@ export interface RequestDetails {
   ellipseUserId?: string | null;
 
   temporaryPosition?: string | null;
-  temporaryPostId?: number | null;
-  permanentPostId?: number | null;
+  temporaryPostId?: string | null;
+  permanentPostId?: string | null;
 
   lineManagerApproved?: boolean | null;
 
@@ -279,6 +278,8 @@ export interface RequestDetails {
   implementationComments?: string | null;
 
   submittedByServiceNumber?: string | null;
+
+  documentResubmissionRequests? : [] | null;
 }
 
 export interface ImplementRequestDetails {

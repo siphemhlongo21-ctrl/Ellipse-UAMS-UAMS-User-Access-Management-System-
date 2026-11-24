@@ -1,4 +1,5 @@
-﻿using EUAMS.Core.Lookups;
+﻿using EUAMS.Core.BackgroundServices;
+using EUAMS.Core.Lookups;
 using EUAMS.Core.Notifications;
 using EUAMS.Core.Reports;
 using EUAMS.Core.Security;
@@ -40,9 +41,10 @@ namespace EUAMS.Core.Extensions
             services.AddScoped<IRequestAccessService, RequestAccessService>();
             services.AddScoped<ILookupsAdminService, LookupsAdminService>();
             services.AddScoped<IReportService, ReportService>();
-            services.AddScoped<IRequestNotificationService, RequestNotificationService>();
+            services.AddScoped<RequestNotificationService>();
             services.AddScoped<ILookupUSTEmployeeServices, LookupUSTEmployeeServices>();
             services.AddHostedService<AccessExpiryReminderService>();
+            services.AddHostedService<DocumentArchivalService>();
             services.AddScoped<ITokenService, TokenService>();
             services.AddScoped<IAuthServices, AuthServices>();
         }
